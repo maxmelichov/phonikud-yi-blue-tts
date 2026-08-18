@@ -344,10 +344,10 @@ try:
     out, subs = phones.normalize_notation("eːbn")
     eː = [x for x in subs if x.source == "eː"]
     check(
-        out == "eːbn" and eː and not eː[0].applied
-        and set(eː[0].alternatives) == {"ej", "ɛ"},
-        "an ambiguous eː is reported, not rewritten",
-        f"{out!r} — eː could be ej or ɛ, so the caller chooses",
+        out == "ejbn" and eː and eː[0].applied and eː[0].ambiguous
+        and eː[0].alternatives == ("ɛ",),
+        "an ambiguous eː resolves and reports the assumption",
+        f"{out!r} — eː -> ej, alternative ɛ offered",
     )
 
     # Idempotence is the property that a str.replace chain cannot hold: it used
@@ -366,14 +366,16 @@ try:
 
     # Ambiguous symbols are reported, never guessed: `o` is ɔ in ɡrɔjs but u in
     # uvnt and i in inz, and the symbol does not carry the vowel class.
+    # Blocking on the first `o` of a paragraph made the tab unusable, so the
+    # common reading is applied and flagged as an assumption instead.
     out, subs = phones.normalize_notation("ɡrojs")
     ambiguous = [x for x in subs if x.ambiguous]
     check(
-        out == "ɡrojs" and phones.validate(out) == ["o"] and ambiguous
-        and not ambiguous[0].applied
-        and set(ambiguous[0].alternatives) == {"ɔ", "u", "i"},
-        "an ambiguous vowel is reported with its candidates, not chosen",
-        f"o -> {ambiguous[0].alternatives if ambiguous else None}",
+        out == "ɡrɔjs" and not phones.validate(out) and ambiguous
+        and ambiguous[0].applied and ambiguous[0].result == "ɔ"
+        and set(ambiguous[0].alternatives) == {"u", "i"},
+        "an ambiguous vowel resolves and reports what it assumed",
+        f"o -> ɔ, alternatives {ambiguous[0].alternatives if ambiguous else None}",
     )
 
     # Engine output must be a strict no-op here: it is already in the inventory.

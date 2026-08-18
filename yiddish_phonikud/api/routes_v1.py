@@ -303,27 +303,16 @@ def inventory_error(piece: Analysis) -> str:
 
     The bare form of this message ("phonemes outside the Yiddish inventory: ɪ")
     is true and useless: a reviewer writing in YIVO notation has no way to know
-    that this project spells the same sound `i`. So name the offenders, and for
-    the ones we can explain, say what they could have meant. Ambiguous vowels
-    get their candidate list because we refuse to choose for them; anything else
-    off-inventory is simply not a Yiddish phone here.
+    that this project spells the same sound `i`. Notation variants — including
+    the ambiguous vowels, which are resolved to their common reading and flagged
+    as assumptions — never reach here any more, so anything that does is simply
+    not a Yiddish phone: name it and show the inventory.
     """
-    parts = ["phonemes outside the Yiddish inventory: " + " ".join(piece.unsupported)]
-    for sub in piece.notation:
-        if not sub.applied and sub.alternatives:
-            parts.append(
-                f"{sub.source} is ambiguous here — write "
-                + " or ".join(sub.alternatives)
-                + " for the reading you mean"
-            )
-    hints = [u for u in piece.unsupported
-             if u not in {s.source for s in piece.notation}]
-    if hints:
-        parts.append(
-            "the closed inventory is: " + " ".join(sorted(phones.INVENTORY))
-        )
-    parts.append("or use the Text tab and let the engine choose the readings")
-    return "; ".join(parts)
+    return "; ".join([
+        "phonemes outside the Yiddish inventory: " + " ".join(piece.unsupported),
+        "the closed inventory is: " + " ".join(sorted(phones.INVENTORY)),
+        "or use the Text tab and let the engine choose the readings",
+    ])
 
 
 def dropped_report(unsupported: Iterable[str], dropped: Iterable[str]) -> list[str]:

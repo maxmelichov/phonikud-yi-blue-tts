@@ -373,17 +373,17 @@ class NotationSubstitution(BaseModel):
     result: str = Field(
         ...,
         description=(
-            "The inventory phone it became. **Empty when `applied` is false**: "
-            "the symbol was recognised as a notation variant but maps to more "
-            "than one inventory phone, and this service will not choose."
+            "The inventory phone it became. When `ambiguous` is true this is "
+            "the reading that was **assumed**, and `alternatives` lists the "
+            "readings that were not chosen."
         ),
         examples=["i", ""],
     )
     applied: bool = Field(
         ...,
         description=(
-            "True when the rewrite was made. False for an ambiguous symbol, "
-            "which is left in place and reported in `unsupported` instead."
+            "True when the rewrite was made. Always true today; kept so a "
+            "future rule that only reports has somewhere to say so."
         ),
     )
     ambiguous: bool = Field(
@@ -395,9 +395,10 @@ class NotationSubstitution(BaseModel):
             "For an ambiguous symbol, the inventory phones it could have meant. "
             "`o` is `ɔ` in גרויס (ɡrɔjs) but `u` in אוונט (uvnt) and `i` in "
             "אונז (inz) — which one is right depends on the word's historical "
-            "vowel class, which the symbol does not carry, so the caller "
-            "decides. Prefer the Text tab, where the engine's authority chain "
-            "decides from the spelling."
+            "vowel class, which the symbol does not carry. The most common "
+            "reading is applied and reported here as an assumption; type the "
+            "inventory symbol directly to override it, or use text input, where "
+            "the engine's authority chain decides from the spelling."
         ),
         examples=[["ɔ", "u", "i"]],
     )

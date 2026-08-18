@@ -314,13 +314,19 @@ NOTATION_SEQUENCES: tuple[tuple[str, str], ...] = (
 # common reading and say so; the reviewer overrides by typing the inventory
 # symbol directly, or better, by using the Text tab and letting the engine's
 # own authority chain decide.
-# We do NOT pick for them. `o` is spec-v3 `ɔ` in גרויס (ɡrɔjs) but `u` in
-# אוונט (uvnt) and `i` in אונז (inz) -- same symbol, different vowel class, and
-# the symbol does not carry the class. Guessing would put a fabricated reading
-# into a stream that feeds the gold lexicon, so instead the symbol is left in
-# place (validate() rejects it) and the caller is told which inventory phones it
-# could have meant. The reviewer types the one they mean, or -- better -- uses
-# the Text tab and lets the engine's authority chain decide from the spelling.
+# These map to more than one inventory phone, and which one is right depends on
+# the word's historical vowel class, which the symbol does not carry: `o` is ɔ in
+# גרויס (ɡrɔjs) but u in אוונט (uvnt) and i in אונז (inz).
+#
+# Earlier this refused to choose and left the symbol for validate() to reject.
+# That was defensible and useless in practice: a reviewer typing a whole
+# paragraph got stopped on the first `o` with no way forward except retyping.
+# So we apply the most common reading and REPORT it as an assumption
+# (`ambiguous=True`), which the caller shows. Typing the inventory symbol
+# directly overrides it, and the Text tab avoids the question entirely because
+# there the engine's authority chain decides from the spelling.
+#
+# First entry is the reading applied; the rest are offered as alternatives.
 NOTATION_AMBIGUOUS: dict[str, tuple[str, ...]] = {
     "o": ("ɔ", "u", "i"),
     "oː": ("ɔ", "u"),
@@ -402,9 +408,9 @@ def normalize_notation(ipa: str) -> tuple[str, list[Substitution]]:
         if source != result:
             rules.append((source, result, False, ()))
     for source, candidates in NOTATION_AMBIGUOUS.items():
-        # result None *and* ambiguous True: matched so it cannot be partially
-        # eaten by a shorter rule, emitted verbatim, reported for a decision.
-        rules.append((source, None, True, candidates))
+        # candidates[0] is applied; the rest ride along in the report so the
+        # caller can see what was not chosen.
+        rules.append((source, candidates[0], True, candidates[1:]))
     rules.sort(key=lambda row: len(row[0]), reverse=True)
 
     seen: dict[str, Substitution] = {}
@@ -414,12 +420,8 @@ def normalize_notation(ipa: str) -> tuple[str, list[Substitution]]:
         for source, result, ambiguous, alternatives in rules:
             if not ipa.startswith(source, i):
                 continue
-            if result is None:
-                # Either an inventory unit (keep it, it is already correct) or an
-                # ambiguous variant (keep it, and report that a choice is needed).
+            if result is None:            # an inventory unit: already correct
                 pieces.append(source)
-                if ambiguous:
-                    seen.setdefault(source, Substitution(source, "", True, alternatives))
             else:
                 pieces.append(result)
                 seen.setdefault(source, Substitution(source, result, ambiguous, alternatives))
