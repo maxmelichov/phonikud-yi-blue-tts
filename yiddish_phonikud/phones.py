@@ -379,9 +379,10 @@ def normalize_notation(ipa: str) -> tuple[str, list[Substitution]]:
       * ``str.replace`` cascades into its own output. Rewriting ``eː``->``ej``
         and then ``e``->``ɛ`` turns ``eːbn`` into ``ɛjbn``, because the second
         rule matches the ``e`` the first rule just produced.
-      * It also eats valid input. ``oʊ`` is a single inventory unit (``הויז`` ->
-        ``hoʊz``), but a bare ``ʊ``->``u`` rule reaches inside it and
-        ``ʃoʊn`` becomes ``ʃɔun``.
+      * It also eats valid input. ``oʊ`` is a single inventory unit -- ``הויז``
+        -> ``hoʊz``, ``לויט`` -> ``loʊt``, ``אויך`` -> ``oʊx``, all lexicon hits
+        at HIGH confidence -- but a bare ``ʊ``->``u`` rule reaches inside it and
+        splits it, so ``hoʊz`` came out as ``hɔuz``.
 
     Matching inventory units FIRST and emitting them untouched fixes both: a
     unit already in the inventory is never a notation variant, and each source

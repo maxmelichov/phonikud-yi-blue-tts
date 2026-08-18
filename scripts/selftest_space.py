@@ -326,11 +326,16 @@ try:
 
     # Both of these were real bugs in the first implementation, which used a
     # series of str.replace calls. They must not come back.
-    out, subs = phones.normalize_notation("ʃoʊn hoʊz")
+    # hoʊz / loʊt / oʊx are the engine's own readings of הויז / לויט / אויך —
+    # all three lexicon hits at HIGH confidence. Use verified readings as test
+    # data, never invented ones: an example string that looks like a sanctioned
+    # form but is not gets copied into commit messages and docs and then read
+    # back as if the engine produced it.
+    out, subs = phones.normalize_notation("hoʊz loʊt oʊx")
     check(
-        out == "ʃoʊn hoʊz" and not subs,
+        out == "hoʊz loʊt oʊx" and not subs,
         "a legitimate oʊ survives conversion untouched",
-        f"{out!r} — a bare ʊ->u rule used to reach inside it and give ʃɔun",
+        f"{out!r} — a bare ʊ->u rule used to reach inside oʊ and split it",
     )
     out, subs = phones.normalize_notation("eːbn")
     eː = [x for x in subs if x.source == "eː"]
@@ -345,7 +350,7 @@ try:
     # to rewrite its own output (e->ɛ cascading into the ej that eː->ej had just
     # produced, turning eːbn into ɛjbn). One protected left-to-right pass
     # consumes each source position exactly once, so a second pass is a no-op.
-    for probe in ("mɪt a pʊr jʊr tsɪrɪk", "gut", "ʃoʊn hoʊz", "eːbn", "ɡrojs",
+    for probe in ("mɪt a pʊr jʊr tsɪrɪk", "gut", "hoʊz loʊt oʊx", "eːbn", "ɡrojs",
                   "mit a pˈur jur ʦirˈik"):
         once, _ = phones.normalize_notation(probe)
         twice, _ = phones.normalize_notation(once)
