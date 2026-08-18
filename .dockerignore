@@ -1,0 +1,26 @@
+# Build context exclusions.
+#
+# Hugging Face Spaces builds from the git repo, so it never sees any of this —
+# but a local `docker build .` copies the whole working tree, and `COPY . .`
+# followed by `RUN rm -rf` cannot shrink the image: Docker layers are additive,
+# so the copied bytes stay in the earlier layer and the removal only writes
+# whiteout entries. Excluding them here is the only thing that actually keeps a
+# laptop build the same size as the Spaces one (measured in this tree: 256 MB of
+# .venv plus 354 MB of .git).
+.venv/
+venv/
+.git/
+.gitignore
+.gitattributes
+__pycache__/
+*.pyc
+*.pyo
+*.wav
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+# Documentation and dev tooling: not imported by the running app.
+docs/
+scripts/

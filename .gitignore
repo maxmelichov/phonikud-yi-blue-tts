@@ -1,0 +1,13 @@
+# Local virtualenv — the Space installs from requirements.txt at image build time.
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# Scratch audio from local synthesis checks
+/tmp_audio/
+*.wav.tmp
