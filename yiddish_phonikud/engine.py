@@ -138,16 +138,39 @@ def engine_dir() -> Path:
 
     from huggingface_hub import snapshot_download  # imported late: network dependency
 
-    log.info("downloading engine %s@%s (~1.23 GB on a cold cache)",
-             ENGINE_REPO_ID, ENGINE_REVISION)
-    _dir = Path(
-        snapshot_download(
-            repo_id=ENGINE_REPO_ID,
-            revision=ENGINE_REVISION,
-            token=os.environ.get("HF_TOKEN"),
-        )
-    ).resolve()
+    # `local_dir` is load-bearing, not a preference. Without it the snapshot is a
+    # tree of symlinks into the cache's blobs/ directory, and yiddish_labels
+    # locates the engine with `Path(__file__).resolve().parent` -- resolve()
+    # follows the symlink, so `_HERE` lands in blobs/ and its search for a
+    # sibling data/ directory fails. The engine then refuses to load rather than
+    # running without its tables, which is the guard behaving correctly on a
+    # layout it cannot read. Materialising real files is the fix; it also keeps
+    # onnxruntime's external-data lookup (onnx_yiddish_v5/model.onnx.data, 1.2 GB
+    # beside a 220 KB graph) resolving next to a real file.
+    target = _engine_local_dir()
+    log.info("downloading engine %s@%s into %s (~1.23 GB on a cold cache)",
+             ENGINE_REPO_ID, ENGINE_REVISION, target)
+    snapshot_download(
+        repo_id=ENGINE_REPO_ID,
+        revision=ENGINE_REVISION,
+        token=os.environ.get("HF_TOKEN"),
+        local_dir=str(target),
+    )
+    _dir = target
     return _dir
+
+
+def _engine_local_dir() -> Path:
+    """Real-file destination for the engine snapshot, keyed by revision.
+
+    Sits under HF_HOME when set (the container points that at a writable path
+    owned by uid 1000) so the engine shares the cache volume everything else
+    uses, and is revision-scoped so moving ENGINE_REVISION cannot land a new
+    export on top of an old one.
+    """
+    root = os.environ.get("HF_HOME")
+    base = Path(root).expanduser() if root else Path.home() / ".cache" / "huggingface"
+    return (base / "phonikud-yi-engine" / ENGINE_REVISION).resolve()
 
 
 def load() -> None:
