@@ -536,12 +536,50 @@ try:
         ", ".join(f"{k}={v}" for k, v in tables.items()) if not empty
         else f"EMPTY: {', '.join(empty)} — redownload the engine, do not serve",
     )
+    # --- respelling as a correction channel (the REYD approach) -------------
+    # REYD's Yiddish TTS sidesteps loshn-koydesh entirely: its corpus respells
+    # Hebrew-origin words phonetically (תכשיט -> טאַכשעט) so that letters ARE
+    # phonemes, and 0 of 4362 rows contain ת. The same trick works here as an
+    # editorial channel, and it matters because it is far easier for a Yiddish
+    # speaker to respell a word than to write IPA.
+    #
+    # Two properties have to hold for that to be usable, and both are checked:
+    #   1. a Hasidic respelling reproduces the word's gold reading exactly;
+    #   2. words the engine cannot resolve from Hebrew spelling ARE resolvable
+    #      from a respelling.
+    respell_ok = engine.text_to_ipa("שאַבעס") == engine.text_to_ipa("שבת")
+    check(
+        respell_ok,
+        "a Hasidic respelling reproduces the gold reading",
+        f'שאַבעס -> {engine.text_to_ipa("שאַבעס")} == שבת (gold)',
+    )
+
+    # The vowel LETTER carries the dialect, so a YIVO-convention respelling
+    # yields standard-Yiddish vowels, not Hasidic ones. This is why REYD's own
+    # respellings cannot be imported verbatim: they would inject Litvish
+    # readings over native Hasidic verdicts.
+    yivo = engine.text_to_ipa("שאָבעס")
+    check(
+        yivo != engine.text_to_ipa("שבת") and yivo == "ʃˈubəs",
+        "a YIVO respelling reads standard, not Hasidic",
+        f"שאָבעס -> {yivo} vs שאַבעס -> {engine.text_to_ipa('שאַבעס')}",
+    )
+
+    rescued = engine.text_to_ipa("טאַכשעט")
+    check(
+        not engine.text_to_ipa("תכשיט").strip() and rescued == "tˈaxʃət",
+        "a respelling rescues a word the engine quarantines",
+        f"תכשיט -> (quarantined), טאַכשעט -> {rescued}",
+    )
+
 except Exception as exc:  # noqa: BLE001
     dep = missing_dep(exc)
     if dep:
         skip("engine", f"{dep} not installed")
     else:
         check(False, "engine", repr(exc))
+
+
 
 
 # ---------------------------------------------------------------------------
