@@ -12,7 +12,7 @@ Why this bundle is the right acoustic model for Yiddish, and where it is not:
   ``ˈ`` = 120, ``ː`` = 122). Nothing has to be folded, unlike the Piper voice.
 * ``stats.npz`` was exported from ``stats_yiddish.pt`` and ``yi`` is one of the
   checkpoint's declared languages, so the latent statistics are the Yiddish
-  ones — but all five bundled voices are Hebrew or English readers, so expect
+  ones — but every offered voice is a Hebrew or English reader, so expect
   a foreign accent even though every phone is rendered.
 * The autoencoder *encoder* was never exported, so ``duration_predictor.onnx``
   (wants ``z_ref``) and ``reference_encoder.onnx`` are unusable here and this
@@ -92,7 +92,27 @@ DEFAULT_SPEED = 1.0
 # synthesized F0 tracked the published per-voice figure most closely
 # (128 Hz documented, 123-131 Hz measured over three utterances) and it is the
 # reference CLI's own default.
-DEFAULT_VOICE = "libri_male_6209"
+# Public voice names. The bundle ships LibriTTS-derived style files whose stems
+# ("libri_male_6209") name a speaker id in a corpus, which is meaningless to
+# anyone choosing a voice, so each is presented under a Yiddish given name.
+#
+# The mapping is by style-file stem, and the underlying stems remain accepted as
+# aliases so any caller or script written against the raw ids keeps working.
+# Genders follow the model card's documented F0: 6209 ~128 Hz and 8088 male,
+# 1088 ~204 Hz and 6147 ~211 Hz female.
+VOICE_NAMES: dict[str, str] = {
+    "Berl": "libri_male_6209",
+    "Hershl": "libri_male_8088",
+    "Sheyndl": "libri_female_1088",
+    "Rukhl": "libri_female_6147",
+}
+
+#: Style files present in the bundle but deliberately not offered. `female` is
+#: withheld at the project owner's request; its style file stays in the snapshot
+#: (it is part of the published bundle) and is simply never listed or resolved.
+WITHHELD_VOICES: frozenset[str] = frozenset({"female"})
+
+DEFAULT_VOICE = "Berl"
 
 # app.py:1845 rejects any voice JSON whose style_ttl std exceeds this as
 # incompatible with the checkpoint. All five 2.5 voices measure 0.055-0.064.
@@ -378,6 +398,7 @@ class BlueYiddish:
         self._voice_files: dict[str, Path] = {
             path.stem: path
             for path in sorted((self.model_path / "voices").glob("*.json"))
+            if path.stem not in WITHHELD_VOICES
         }
         if not self._voice_files:
             raise FileNotFoundError(f"no voices/*.json under {self.model_path}")
@@ -421,7 +442,9 @@ class BlueYiddish:
                             log.warning("skipping voice %s: %s", name, exc)
                             continue
                         usable.append(name)
-                    self._voices = sorted(usable)
+                    # Report the public names, not the style-file stems.
+                    by_stem = {stem: name for name, stem in VOICE_NAMES.items()}
+                    self._voices = sorted(by_stem.get(stem, stem) for stem in usable)
         return list(self._voices)
 
     def vocab(self) -> set[str]:
@@ -594,6 +617,9 @@ class BlueYiddish:
     # Voices
     # ------------------------------------------------------------------
     def _style(self, name: str) -> _Style:
+        # A public name ("Berl") or the raw style-file stem it maps to; the stems
+        # stay accepted so callers written against the bundle's own ids work.
+        name = VOICE_NAMES.get(name, name)
         cached = self._styles.get(name)
         if cached is not None:
             return cached

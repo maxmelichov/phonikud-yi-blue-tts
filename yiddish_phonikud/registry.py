@@ -131,7 +131,7 @@ PIPER_YI = RuntimeManifest(
 )
 
 # The full file list from the 2.5 manifest.json, in its own order, plus the
-# five saved voices it lists under "voices". duration_predictor.onnx and
+# saved voices it lists under "voices". duration_predictor.onnx and
 # reference_encoder.onnx are part of the bundle and are listed for completeness,
 # but the adapter never opens them (both need z_ref, and the autoencoder encoder
 # that would produce it was not exported), so they are absent from
@@ -188,13 +188,13 @@ BLUE_YI = RuntimeManifest(
         "The default runtime. Yiddish (`yi`) is one of the checkpoint's declared "
         "languages and its latent statistics were exported from stats_yiddish.pt, "
         "so this is a Yiddish-aware acoustic model rather than a Hebrew one driven "
-        "with Yiddish phonemes. 44.1 kHz output, five saved voices, and a "
+        "with Yiddish phonemes. 44.1 kHz output, four saved voices, and a "
         "character-level vocab that covers the Yiddish closed inventory outright — "
         "ʦ, ʧ, ʤ, ɡ and ŋ are single embeddings here, so every phone reaches the "
         "model unfolded and none is dropped (a few punctuation characters the "
         "engine passes through are outside the vocab and are removed silently; "
-        "they carry no sound). The honest caveat: all five bundled voices are "
-        "Hebrew or English readers, so a foreign accent is likely even though "
+        "they carry no sound). The honest caveat: every offered voice is a "
+        "Hebrew or English reader, so a foreign accent is likely even though "
         "every phone is rendered."
     ),
     # Only a hint for a manual local install: the adapter loads the bundle from

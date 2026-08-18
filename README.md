@@ -29,7 +29,7 @@ Yiddish text goes in; nikud, IPA and audio come out. The linguistic work is done
 text → nikud → IPA stack adapted from *Phonikud*
 ([arXiv 2506.12311](https://arxiv.org/abs/2506.12311)) — and the waveform by
 [**BlueTTS 2.5**](https://huggingface.co/notmax123/BlueTTS2.5-onnx), a flow-matching ONNX
-model at 44.1 kHz with five saved voices. A 22.05 kHz Piper voice stays in the image as a
+model at 44.1 kHz with four saved voices. A 22.05 kHz Piper voice stays in the image as a
 lightweight fallback. Read [Limitations](#limitations) before you judge the audio.
 
 The engine (~1.23 GB, including the v5 pointing model) and the acoustic bundle (~282 MB) are
@@ -124,7 +124,7 @@ Speech, on the default runtime (44.1 kHz):
 ```bash
 curl -X POST https://<space-host>/v1/audio/speech \
   -H 'Content-Type: application/json' \
-  -d '{"input": "מיט א פאר יאר צוריק", "voice": "libri_male_6209", "speed": 1.0}' \
+  -d '{"input": "מיט א פאר יאר צוריק", "voice": "Berl", "speed": 1.0}' \
   -o out.wav
 ```
 
@@ -199,8 +199,10 @@ rules and a Python client are in [`docs/API.md`](docs/API.md#streaming-frame-for
 `installed` (are the required files present?) and `available` (does this build implement the
 runtime?):
 
-- **`blue_yi`** — *the default.* BlueTTS 2.5, ~282 MB, **44.1 kHz**, five saved voices:
-  `female`, `libri_female_1088`, `libri_female_6147`, `libri_male_6209`, `libri_male_8088`.
+- **`blue_yi`** — *the default.* BlueTTS 2.5, ~282 MB, **44.1 kHz**, four saved voices:
+  `Berl` and `Hershl` (male), `Rukhl` and `Sheyndl` (female). These are presentation
+  names for the bundle's LibriTTS-derived style files, whose own stems name a corpus
+  speaker id; the raw stems stay accepted as aliases.
   Yiddish is one of the checkpoint's declared languages and its latent statistics were
   exported from `stats_yiddish.pt`. Its character vocab covers the Yiddish inventory outright.
   Two extra options are accepted: `n_steps` (default 8) and `cfg_scale` (default 4.0).

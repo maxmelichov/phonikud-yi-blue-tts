@@ -161,7 +161,7 @@ Two runtimes ship, and **they do not share a sample rate**. Read it from
 | Model | BlueTTS 2.5 ONNX, flow-matching | Piper VITS ONNX |
 | Sample rate | **44100 Hz** | **22050 Hz** |
 | On disk | ~282 MB, fetched from `notmax123/BlueTTS2.5-onnx` | ~61 MB, committed beside `app.py` |
-| Voices | `female`, `libri_female_1088`, `libri_female_6147`, `libri_male_6209`, `libri_male_8088` | one, unnamed |
+| Voices | `Berl`, `Hershl`, `Rukhl`, `Sheyndl` | one, unnamed |
 | Yiddish phones | complete: nothing folded, nothing dropped | `ʧ`, `ʤ` folded to `tʃ`, `dʒ` |
 | Extra options | `n_steps` (8), `cfg_scale` (4.0), `seed` | none; these three are ignored |
 
@@ -314,7 +314,7 @@ curl -s http://localhost:7860/v1/voices
 ```
 
 ```json
-{"runtime":"blue_yi","voices":["female","libri_female_1088","libri_female_6147","libri_male_6209","libri_male_8088"]}
+{"runtime":"blue_yi","voices":["Berl","Hershl","Rukhl","Sheyndl"]}
 ```
 
 The five names are Blue's saved styles; the demo UI's voice picker is populated from exactly
@@ -511,7 +511,7 @@ Default runtime, named voice:
 ```bash
 curl -s -X POST http://localhost:7860/v1/audio/speech \
   -H 'Content-Type: application/json' \
-  -d '{"input": "מיט א פאר יאר צוריק", "voice": "libri_male_6209"}' \
+  -d '{"input": "מיט א פאר יאר צוריק", "voice": "Berl"}' \
   -o out.wav
 ```
 
@@ -767,7 +767,7 @@ def speak(text: str, *, voice: str = "", save_to: str | None = None) -> None:
 if __name__ == "__main__":
     speak(
         "וואס האט ער געזאגט? מיט א פאר יאר צוריק איז דאס געווען אנדערש.",
-        voice="libri_male_6209",
+        voice="Berl",
         save_to="out.wav",
     )
 ```

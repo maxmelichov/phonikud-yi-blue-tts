@@ -87,18 +87,22 @@ CANARY_IPA = "mit a pˈur jur ʦirˈik"
 # sit 10-16 % above the card — while still rejecting the 231 Hz tonal drone the
 # wrong latent fold produced on the 128 Hz male voice (band top 166 Hz).
 BLUE_VOICE_F0_HZ: dict[str, float] = {
-    "libri_male_6209": 128.0,
-    "libri_female_6147": 211.0,
-    "female": 180.0,
-    "libri_female_1088": 204.0,
+    "Berl": 128.0,          # libri_male_6209
+    "Rukhl": 211.0,         # libri_female_6147
+    "Sheyndl": 204.0,       # libri_female_1088
 }
+
+#: Which offered voices are male. The style-file stems used to carry this
+#: ("libri_male_6209"), so a substring test was enough; the public names do not,
+#: so the mapping has to be explicit.
+BLUE_MALE_VOICES = {"Berl", "Hershl"}
+
 BLUE_F0_TOLERANCE = 0.30
 BLUE_VOICES: tuple[str, ...] = (
-    "female",
-    "libri_female_1088",
-    "libri_female_6147",
-    "libri_male_6209",
-    "libri_male_8088",
+    "Berl",
+    "Hershl",
+    "Rukhl",
+    "Sheyndl",
 )
 # Env var the Blue adapter reads to use an already-downloaded bundle.
 BLUE_DIR_ENV = "BLUE25_MODEL_DIR"
@@ -652,7 +656,7 @@ try:
     voices = blue_rt.voices()
     check(
         sorted(voices) == list(BLUE_VOICES),
-        "blue lists its five fixed voices",
+        "blue lists its four fixed voices",
         ", ".join(voices),
     )
 
@@ -869,8 +873,8 @@ try:
             f"{est:.1f} Hz vs documented {documented:.0f} Hz "
             f"(band {lo:.0f}-{hi:.0f}), {voiced} voiced frames, hnr {hnr:.2f}",
         )
-    male = f0_by_voice.get("libri_male_6209", float("nan"))
-    females = [v for k, v in f0_by_voice.items() if "female" in k]
+    male = f0_by_voice.get("Berl", float("nan"))
+    females = [v for k, v in f0_by_voice.items() if k not in BLUE_MALE_VOICES]
     check(
         bool(females) and all(male < f for f in females),
         "blue keeps speaker identity: the male voice is the lowest",
@@ -887,9 +891,9 @@ try:
     check(refused, "blue refuses an unknown voice", why)
 
     # --- determinism --------------------------------------------------------
-    a, _ = blue_rt.synthesize(CANARY_IPA, voice="female", speed=1.0, n_steps=4, seed=7)
-    b, _ = blue_rt.synthesize(CANARY_IPA, voice="female", speed=1.0, n_steps=4, seed=7)
-    c, _ = blue_rt.synthesize(CANARY_IPA, voice="female", speed=1.0, n_steps=4, seed=8)
+    a, _ = blue_rt.synthesize(CANARY_IPA, voice="Berl", speed=1.0, n_steps=4, seed=7)
+    b, _ = blue_rt.synthesize(CANARY_IPA, voice="Berl", speed=1.0, n_steps=4, seed=7)
+    c, _ = blue_rt.synthesize(CANARY_IPA, voice="Berl", speed=1.0, n_steps=4, seed=8)
     check(
         a.shape == b.shape and np.array_equal(a, b),
         "same seed gives bit-identical samples",
