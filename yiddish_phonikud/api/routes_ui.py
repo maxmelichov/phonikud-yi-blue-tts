@@ -38,6 +38,7 @@ from .routes_v1 import (
     check_voice,
     dropped_report,
     heavy_slot,
+    inventory_error,
     render_text,
     resolve_runtime,
 )
@@ -283,12 +284,7 @@ async def generate(
             # model's one-utterance-per-call limit.
             result: Analysis = await run_in_threadpool(analyze, source, form)
             if form is InputForm.PHONEMES and result.unsupported:
-                return _error(
-                    400,
-                    "invalid_request",
-                    "phonemes outside the Yiddish inventory: "
-                    + " ".join(result.unsupported),
-                )
+                return _error(400, "invalid_request", inventory_error(result))
             if not result.phonemes.strip():
                 return _error(400, "invalid_request", "no phonemes to synthesize")
             samples, dropped = await run_in_threadpool(
@@ -329,6 +325,10 @@ async def generate(
                 for row in result.tokens
             ],
             "unsupported": dropped_report(result.unsupported, dropped),
+            # Notation rewrites applied to caller IPA, so the Phonemes tab can
+            # show what it changed. Nothing here is silent by design.
+            "notation": [sub.as_dict() for sub in result.notation],
+            "stress_warning": result.stress_warning,
             "runtime": rt.id,
             "voice": voice,
             "sample_rate": rt.sample_rate,

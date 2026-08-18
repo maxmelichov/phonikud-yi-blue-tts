@@ -287,6 +287,19 @@ class PhonemizeBody(BaseModel):
             "read, with or without this flag."
         ),
     )
+    input_is_phonemes: bool = Field(
+        False,
+        description=(
+            "Declare `input` as IPA rather than Yiddish text. Nothing is "
+            "diacritized and the G2P does not run: the string is normalised out "
+            "of alternate notation (see `notation`) and checked against the "
+            "closed inventory. This is the way to validate a hand-written "
+            "transcription — which symbols are off-inventory, which are "
+            "ambiguous, and whether stress is marked — without synthesizing "
+            "anything. `tokens` is empty for this form, because there is no "
+            "spelling to derive a per-word trace from."
+        ),
+    )
 
 
 class PhonemizeResponse(BaseModel):
@@ -329,6 +342,64 @@ class PhonemizeResponse(BaseModel):
             "inventory, deduped and in order. Empty means a clean transcription; "
             "a non-empty list is a G2P bug worth reporting."
         ),
+    )
+    notation: list[NotationSubstitution] = Field(
+        default_factory=list,
+        description=(
+            "**`input_is_phonemes` only.** Notation variants found in your IPA. "
+            "A reviewer writing YIVO/Weinreich habitually types `mɪt`, `pʊr`, "
+            "`tsɪrɪk` and ASCII `g`; those mean inventory phones spelled "
+            "differently, so they are rewritten and reported here rather than "
+            "refused. Empty for text and nikud input, whose IPA comes from the "
+            "engine and is in the inventory by construction."
+        ),
+    )
+    stress_warning: str | None = Field(
+        None,
+        description=(
+            "**`input_is_phonemes` only.** Set when your IPA contains no `ˈ` at "
+            "all and some word has more than one vowel — the utterance will be "
+            "spoken flat. Where the stress falls is phonology (the engine "
+            "derives it from the rule path and a lexical override table), so it "
+            "cannot be supplied here; the warning names the words that lack it."
+        ),
+    )
+
+
+class NotationSubstitution(BaseModel):
+    """One rewrite applied to caller-supplied IPA, or one left for the caller."""
+
+    source: str = Field(..., description="The symbol as it was typed.", examples=["ɪ", "o"])
+    result: str = Field(
+        ...,
+        description=(
+            "The inventory phone it became. **Empty when `applied` is false**: "
+            "the symbol was recognised as a notation variant but maps to more "
+            "than one inventory phone, and this service will not choose."
+        ),
+        examples=["i", ""],
+    )
+    applied: bool = Field(
+        ...,
+        description=(
+            "True when the rewrite was made. False for an ambiguous symbol, "
+            "which is left in place and reported in `unsupported` instead."
+        ),
+    )
+    ambiguous: bool = Field(
+        ..., description="True when the symbol maps to more than one inventory phone."
+    )
+    alternatives: list[str] = Field(
+        default_factory=list,
+        description=(
+            "For an ambiguous symbol, the inventory phones it could have meant. "
+            "`o` is `ɔ` in גרויס (ɡrɔjs) but `u` in אוונט (uvnt) and `i` in "
+            "אונז (inz) — which one is right depends on the word's historical "
+            "vowel class, which the symbol does not carry, so the caller "
+            "decides. Prefer the Text tab, where the engine's authority chain "
+            "decides from the spelling."
+        ),
+        examples=[["ɔ", "u", "i"]],
     )
 
 

@@ -310,6 +310,75 @@ try:
         "fold_to_vocab reports a dropped unit",
         f"{folded!r} dropped={dropped}",
     )
+    # --- alternate input notation (the Phonemes tab) ----------------------
+    # A reviewer typing from YIVO/Weinreich habit writes mɪt / pʊr / tsɪrɪk and
+    # ASCII g. Those are the same sounds spelled differently, so they convert.
+    out, subs = phones.normalize_notation("mɪt a pʊr jʊr tsɪrɪk")
+    check(
+        out == "mit a pur jur ʦirik" and not phones.validate(out),
+        "normalize_notation converts YIVO notation to the inventory",
+        f"{out!r} via {[(x.source, x.result) for x in subs]}",
+    )
+    out, _ = phones.normalize_notation("gut")
+    check(out == "ɡut", "ASCII g converts to ɡ U+0261", f"{out!r}")
+    out, _ = phones.normalize_notation("mit'n")
+    check(out == "mitˈn", "ASCII apostrophe converts to the stress mark ˈ", f"{out!r}")
+
+    # Both of these were real bugs in the first implementation, which used a
+    # series of str.replace calls. They must not come back.
+    out, subs = phones.normalize_notation("ʃoʊn hoʊz")
+    check(
+        out == "ʃoʊn hoʊz" and not subs,
+        "a legitimate oʊ survives conversion untouched",
+        f"{out!r} — a bare ʊ->u rule used to reach inside it and give ʃɔun",
+    )
+    out, subs = phones.normalize_notation("eːbn")
+    eː = [x for x in subs if x.source == "eː"]
+    check(
+        out == "eːbn" and eː and not eː[0].applied
+        and set(eː[0].alternatives) == {"ej", "ɛ"},
+        "an ambiguous eː is reported, not rewritten",
+        f"{out!r} — eː could be ej or ɛ, so the caller chooses",
+    )
+
+    # Idempotence is the property that a str.replace chain cannot hold: it used
+    # to rewrite its own output (e->ɛ cascading into the ej that eː->ej had just
+    # produced, turning eːbn into ɛjbn). One protected left-to-right pass
+    # consumes each source position exactly once, so a second pass is a no-op.
+    for probe in ("mɪt a pʊr jʊr tsɪrɪk", "gut", "ʃoʊn hoʊz", "eːbn", "ɡrojs",
+                  "mit a pˈur jur ʦirˈik"):
+        once, _ = phones.normalize_notation(probe)
+        twice, _ = phones.normalize_notation(once)
+        if once != twice:
+            check(False, "normalize_notation is idempotent", f"{probe!r}: {once!r} -> {twice!r}")
+            break
+    else:
+        check(True, "normalize_notation is idempotent", "a second pass changes nothing")
+
+    # Ambiguous symbols are reported, never guessed: `o` is ɔ in ɡrɔjs but u in
+    # uvnt and i in inz, and the symbol does not carry the vowel class.
+    out, subs = phones.normalize_notation("ɡrojs")
+    ambiguous = [x for x in subs if x.ambiguous]
+    check(
+        out == "ɡrojs" and phones.validate(out) == ["o"] and ambiguous
+        and not ambiguous[0].applied
+        and set(ambiguous[0].alternatives) == {"ɔ", "u", "i"},
+        "an ambiguous vowel is reported with its candidates, not chosen",
+        f"o -> {ambiguous[0].alternatives if ambiguous else None}",
+    )
+
+    # Engine output must be a strict no-op here: it is already in the inventory.
+    canon = "mit a pˈur jur ʦirˈik"
+    out, subs = phones.normalize_notation(canon)
+    check(out == canon and not subs, "spec-v3 notation passes through unchanged", canon)
+
+    check(
+        phones.stress_report("mit a pur jur ʦirik") is not None
+        and phones.stress_report(canon) is None
+        and phones.stress_report("mit") is None,
+        "missing stress is reported, present stress and monosyllables are not",
+        "multi-vowel word with no ˈ warns; one-syllable input does not",
+    )
 except Exception as exc:  # noqa: BLE001
     check(False, "phones", repr(exc))
 

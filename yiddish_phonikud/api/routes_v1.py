@@ -88,6 +88,7 @@ from ..runtimes import (
 from ..runtimes.blue_yi import UtteranceTooLongError
 from .dto import (
     DiacritizeResponse,
+    NotationSubstitution,
     ErrorBody,
     HealthResponse,
     LanguagesResponse,
@@ -193,6 +194,10 @@ class Analysis:
     phonemes: str
     tokens: tuple[engine.TokenRow, ...] = ()
     unsupported: tuple[str, ...] = ()
+    # PHONEMES form only: notation variants rewritten on the way in, and a
+    # warning when the caller's IPA carries no stress mark at all.
+    notation: tuple[phones.Substitution, ...] = ()
+    stress_warning: str | None = None
 
 
 def analyze(
@@ -218,7 +223,15 @@ def analyze(
     token table cannot avoid it, because pointing every row is what it is for.
     """
     if form is InputForm.PHONEMES:
-        ipa = text.strip()
+        # Caller IPA is the one input that may arrive in a different convention:
+        # a reviewer typing from YIVO/Weinreich habit writes mɪt / pʊr / tsɪrɪk
+        # and ASCII g, all of which mean inventory phones spelled differently.
+        # normalize_notation rewrites what is unambiguously a spelling variant
+        # and reports every rewrite; it deliberately leaves ambiguous symbols
+        # (o, e) in place for validate() to reject, because choosing between
+        # ɔ/u/i for a bare `o` needs the word's vowel class and would be this
+        # module inventing phonology. Engine output never comes through here.
+        ipa, notation = phones.normalize_notation(text.strip())
         return Analysis(
             form=form,
             text=text,
@@ -226,6 +239,8 @@ def analyze(
             phonemes=ipa,
             tokens=(),
             unsupported=tuple(phones.validate(ipa)),
+            notation=tuple(notation),
+            stress_warning=phones.stress_report(ipa),
         )
 
     # Note the argument to every G2P call below: `text`, never `nikud`.
@@ -281,6 +296,34 @@ def sampler_options(body: SpeechBody) -> dict[str, object]:
         ("seed", body.seed),
     )
     return {name: value for name, value in supplied if value is not None}
+
+
+def inventory_error(piece: Analysis) -> str:
+    """Why this caller-supplied IPA was refused, and what to type instead.
+
+    The bare form of this message ("phonemes outside the Yiddish inventory: ɪ")
+    is true and useless: a reviewer writing in YIVO notation has no way to know
+    that this project spells the same sound `i`. So name the offenders, and for
+    the ones we can explain, say what they could have meant. Ambiguous vowels
+    get their candidate list because we refuse to choose for them; anything else
+    off-inventory is simply not a Yiddish phone here.
+    """
+    parts = ["phonemes outside the Yiddish inventory: " + " ".join(piece.unsupported)]
+    for sub in piece.notation:
+        if not sub.applied and sub.alternatives:
+            parts.append(
+                f"{sub.source} is ambiguous here — write "
+                + " or ".join(sub.alternatives)
+                + " for the reading you mean"
+            )
+    hints = [u for u in piece.unsupported
+             if u not in {s.source for s in piece.notation}]
+    if hints:
+        parts.append(
+            "the closed inventory is: " + " ".join(sorted(phones.INVENTORY))
+        )
+    parts.append("or use the Text tab and let the engine choose the readings")
+    return "; ".join(parts)
 
 
 def dropped_report(unsupported: Iterable[str], dropped: Iterable[str]) -> list[str]:
@@ -366,9 +409,7 @@ def render_chunk(
     """
     piece = analyze(chunk, form, with_tokens=False, with_nikud=False)
     if form is InputForm.PHONEMES and piece.unsupported:
-        raise ValueError(
-            "phonemes outside the Yiddish inventory: " + " ".join(piece.unsupported)
-        )
+        raise ValueError(inventory_error(piece))
     if not piece.phonemes.strip():
         return np.zeros(0, dtype=np.float32), []
     return speak(rt, piece.phonemes, voice=voice, speed=speed, options=options)
@@ -926,6 +967,8 @@ async def phonemize(body: PhonemizeBody) -> Response:
                 for row in result.tokens
             ],
             unsupported=list(result.unsupported),
+            notation=[sub.as_dict() for sub in result.notation],
+            stress_warning=result.stress_warning,
         ).model_dump()
     )
 
@@ -1088,7 +1131,7 @@ async def speech(body: SpeechBody) -> Response:
         return write_error(
             status.HTTP_400_BAD_REQUEST,
             "invalid_request",
-            "phonemes outside the Yiddish inventory: " + " ".join(full.unsupported),
+            inventory_error(full),
         )
     if full.unsupported:
         # Engine output is the authority on Yiddish; refusing to speak it would

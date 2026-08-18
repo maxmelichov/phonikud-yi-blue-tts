@@ -266,3 +266,213 @@ def fold_to_vocab(ipa: str, vocab: Collection[str]) -> tuple[str, list[str]]:
             )
 
     return "".join(out), dropped
+
+
+# ---------------------------------------------------------------------------
+# Alternate-notation input (the Phonemes tab only)
+# ---------------------------------------------------------------------------
+# Yiddish is transcribed in more than one convention. A reviewer typing from
+# YIVO/Weinreich habit writes `mɪt`, `pʊr`, `oːvnt`, `tsɪrɪk`; spec v3 writes
+# `mit`, `pˈur`, `uvnt`, `ʦirˈik`. Rejecting the first as "outside the
+# inventory" is literally true and practically useless -- the sounds are the
+# same, only the spelling of them differs.
+#
+# So: rewrite what is unambiguously a spelling variant, and REPORT every
+# rewrite. Nothing here is silent, because silently rewriting a native
+# speaker's transcription would be worse than refusing it.
+#
+# THIS APPLIES TO CALLER-SUPPLIED IPA ONLY. Engine output is already in the
+# inventory by construction (QA gate (b)), so running it through here would at
+# best be a no-op and at worst mask a real regression.
+
+# Unambiguous: one source symbol, one inventory symbol, no vowel-class
+# knowledge required to choose.
+NOTATION_EXACT: dict[str, str] = {
+    "ɪ": "i",       # Weinreich short i; spec v3 has one /i/
+    "ʊ": "u",       # Weinreich short u; spec v3 has one /u/
+    "ʧ": "ʧ",       # identity, kept so the table reads as the full inventory map
+    "g": "ɡ",       # ASCII g -> U+0261. Distinct codepoints; see the module docstring.
+    "'": "ˈ",       # ASCII apostrophe -> U+02C8. Blue's vocab has BOTH, so an
+                    # unconverted ASCII ' would render as an apostrophe, not stress.
+    "ʼ": "ˈ",       # U+02BC modifier apostrophe, same trap
+    "ˌ": "",        # secondary stress: spec v3 marks primary stress only
+}
+
+# Two-character sequences -> the single-codepoint affricates the vocab uses.
+# Longest-first application matters: `tʃ` must be tried before `t`.
+NOTATION_SEQUENCES: tuple[tuple[str, str], ...] = (
+    ("t͡s", "ʦ"), ("t͡ʃ", "ʧ"), ("d͡ʒ", "ʤ"),   # with U+0361 tie bar
+    ("ts", "ʦ"), ("tʃ", "ʧ"), ("dʒ", "ʤ"),
+    ("aɪ", "aj"), ("ɔɪ", "ɔj"), ("ɛɪ", "ej"), ("eɪ", "ej"),  # spec v3: aj/ɔj, never aɪ/ɔɪ
+    ("iː", "i"), ("uː", "u"), ("ɛː", "ɛ"), ("əː", "ə"),      # length is not phonemic except in aː
+)
+
+# Ambiguous: the symbol maps to more than one inventory phone and which one is
+# right depends on the word's historical vowel class, which the symbol does not
+# carry. `o` is the live example -- Weinreich `o` is spec-v3 `ɔ` in גרויס
+# (ɡrɔjs) but `u` in אוונט (uvnt) and `i` in אונז (inz). We apply the most
+# common reading and say so; the reviewer overrides by typing the inventory
+# symbol directly, or better, by using the Text tab and letting the engine's
+# own authority chain decide.
+# We do NOT pick for them. `o` is spec-v3 `ɔ` in גרויס (ɡrɔjs) but `u` in
+# אוונט (uvnt) and `i` in אונז (inz) -- same symbol, different vowel class, and
+# the symbol does not carry the class. Guessing would put a fabricated reading
+# into a stream that feeds the gold lexicon, so instead the symbol is left in
+# place (validate() rejects it) and the caller is told which inventory phones it
+# could have meant. The reviewer types the one they mean, or -- better -- uses
+# the Text tab and lets the engine's authority chain decide from the spelling.
+NOTATION_AMBIGUOUS: dict[str, tuple[str, ...]] = {
+    "o": ("ɔ", "u", "i"),
+    "oː": ("ɔ", "u"),
+    "e": ("ɛ", "ej"),
+    "eː": ("ej", "ɛ"),
+}
+
+
+class Substitution:
+    """One rewrite applied to caller-supplied IPA, for reporting back."""
+
+    __slots__ = ("source", "result", "ambiguous", "alternatives")
+
+    def __init__(self, source: str, result: str, ambiguous: bool = False,
+                 alternatives: tuple[str, ...] = ()) -> None:
+        self.source = source
+        self.result = result
+        self.ambiguous = ambiguous
+        self.alternatives = alternatives
+
+    @property
+    def applied(self) -> bool:
+        """False for an ambiguous symbol: reported, deliberately not rewritten."""
+        return bool(self.result)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "source": self.source,
+            "result": self.result,
+            "applied": self.applied,
+            "ambiguous": self.ambiguous,
+            "alternatives": list(self.alternatives),
+        }
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"Substitution({self.source!r}->{self.result!r}, ambiguous={self.ambiguous})"
+
+
+def normalize_notation(ipa: str) -> tuple[str, list[Substitution]]:
+    """Rewrite spelling variants of inventory phones into the inventory's own.
+
+    Returns ``(converted, substitutions)``. An empty substitution list means the
+    input was already in spec-v3 notation and nothing was touched. Ambiguous
+    rewrites are flagged in the report with the alternatives that were not
+    chosen, so the caller can show the assumption rather than hide it.
+
+    Deliberately does NOT try to fix anything that is not a notation variant: a
+    symbol that is no Yiddish phone at all (`θ`, `ɐ`) is left in place for
+    ``validate()`` to reject, because guessing at it would be inventing
+    phonology, which belongs to the engine and its native verdicts, not here.
+
+    IMPLEMENTED AS ONE PROTECTED LEFT-TO-RIGHT PASS, not as a series of
+    ``str.replace`` calls. Two bugs make that non-negotiable, both found by
+    testing rather than reasoning:
+
+      * ``str.replace`` cascades into its own output. Rewriting ``eː``->``ej``
+        and then ``e``->``ɛ`` turns ``eːbn`` into ``ɛjbn``, because the second
+        rule matches the ``e`` the first rule just produced.
+      * It also eats valid input. ``oʊ`` is a single inventory unit (``הויז`` ->
+        ``hoʊz``), but a bare ``ʊ``->``u`` rule reaches inside it and
+        ``ʃoʊn`` becomes ``ʃɔun``.
+
+    Matching inventory units FIRST and emitting them untouched fixes both: a
+    unit already in the inventory is never a notation variant, and each source
+    position is consumed exactly once so no rewrite can be rewritten.
+    """
+    if not ipa:
+        return ipa, []
+
+    # Longest-first across all three rule tables plus the inventory itself.
+    # Inventory units are matched but not rewritten -- they are the protection.
+    rules: list[tuple[str, str | None, bool, tuple[str, ...]]] = []
+    for unit in INVENTORY:
+        rules.append((unit, None, False, ()))
+    for source, result in NOTATION_SEQUENCES:
+        rules.append((source, result, False, ()))
+    for source, result in NOTATION_EXACT.items():
+        if source != result:
+            rules.append((source, result, False, ()))
+    for source, candidates in NOTATION_AMBIGUOUS.items():
+        # result None *and* ambiguous True: matched so it cannot be partially
+        # eaten by a shorter rule, emitted verbatim, reported for a decision.
+        rules.append((source, None, True, candidates))
+    rules.sort(key=lambda row: len(row[0]), reverse=True)
+
+    seen: dict[str, Substitution] = {}
+    pieces: list[str] = []
+    i = 0
+    while i < len(ipa):
+        for source, result, ambiguous, alternatives in rules:
+            if not ipa.startswith(source, i):
+                continue
+            if result is None:
+                # Either an inventory unit (keep it, it is already correct) or an
+                # ambiguous variant (keep it, and report that a choice is needed).
+                pieces.append(source)
+                if ambiguous:
+                    seen.setdefault(source, Substitution(source, "", True, alternatives))
+            else:
+                pieces.append(result)
+                seen.setdefault(source, Substitution(source, result, ambiguous, alternatives))
+            i += len(source)
+            break
+        else:
+            pieces.append(ipa[i])         # not a phone at all; validate() will judge it
+            i += 1
+
+    out = "".join(pieces)
+    if seen:
+        logger.info("notation normalised: %s", ", ".join(
+            f"{s.source}->{s.result}" if s.result else f"{s.source}=?"
+            for s in seen.values()))
+    return out, list(seen.values())
+
+
+STRESS = "ˈ"
+
+
+def stress_report(ipa: str) -> str | None:
+    """Warn when caller-supplied IPA carries no stress mark, else None.
+
+    The engine always marks stress -- ``hebrew_to_ipa(..., stress=True)`` is the
+    only way this project calls it, and spec v3 §1 puts ``ˈ`` immediately before
+    the stressed vowel of every word that has one. Caller IPA that contains no
+    ``ˈ`` at all is therefore almost always an omission rather than a choice,
+    and it is an inaudible one to spot in a text box: the voice simply renders
+    the utterance flat.
+
+    We cannot supply the missing mark. Where the stress falls is phonology --
+    the engine derives it from the rule path and overrides it from a lexical
+    table -- and inventing it here would be exactly the kind of second authority
+    this module refuses to become. So: say what is missing, name the words that
+    lack it, and point at the tab that does it correctly.
+    """
+    if STRESS in ipa:
+        return None
+
+    # One-syllable words take no mark, so only flag input that plausibly needs
+    # one. Counting vowel units is enough: a word with two or more vowels and no
+    # ˈ is unstressed in a way the engine would never emit.
+    vowels = set(VOWELS)
+    multi = [
+        word for word in ipa.split()
+        if sum(1 for unit in phone_units(word) if unit in vowels) > 1
+    ]
+    if not multi:
+        return None
+
+    return (
+        "no stress mark (ˈ) anywhere in this input, so it will be spoken flat. "
+        "Spec v3 puts ˈ immediately before the stressed vowel: "
+        + ", ".join(multi[:4])
+        + (" ..." if len(multi) > 4 else "")
+        + ". The Text tab derives stress from the spelling automatically."
+    )
