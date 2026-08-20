@@ -163,16 +163,6 @@ a:hover {
   min-width: 0;
 }
 
-.notice-caveat {
-  background: var(--info-soft);
-  border-color: var(--border-strong);
-  margin-bottom: 18px;
-}
-
-.notice-caveat .notice-icon {
-  color: var(--accent);
-}
-
 .notice-warn {
   background: var(--warn-soft);
   border-color: var(--warn);
@@ -256,13 +246,6 @@ a:hover {
 .section-title i {
   color: var(--text-faint);
   font-size: 0.9rem;
-}
-
-.section-description {
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  margin: 0 0 12px;
-  max-width: 74ch;
 }
 
 .form-control {
@@ -489,13 +472,6 @@ a:hover {
   font-size: 0.9rem;
 }
 
-.result-description {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  margin: 0 0 12px;
-  max-width: 74ch;
-}
-
 .token-count {
   font-size: 0.78rem;
   font-weight: 500;
@@ -643,42 +619,6 @@ a:hover {
   border-bottom-style: dotted;
 }
 
-.table-legend {
-  margin: 12px 0 0;
-  font-size: 0.8rem;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-
-.legend-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 0 0 6px;
-}
-
-.legend-row:last-child {
-  margin-bottom: 0;
-}
-
-.legend-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  max-width: 46ch;
-}
-
-.legend-item .badge-route,
-.legend-item .conf {
-  flex: none;
-}
-
-.rtl-inline {
-  font-family: var(--hebrew);
-  direction: rtl;
-  unicode-bidi: isolate;
-}
-
 /* ---------- phone chips ---------- */
 
 .phone-chips {
@@ -774,13 +714,6 @@ select.control-input {
   cursor: not-allowed;
 }
 
-.control-state {
-  margin: 12px 0 0;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--text-muted);
-}
-
 .advanced {
   margin-top: 12px;
   border-top: 1px solid var(--border);
@@ -817,134 +750,6 @@ select.control-input {
 
 .advanced .control-grid {
   margin-top: 12px;
-}
-
-.control-note {
-  margin: 10px 0 0;
-  font-size: 0.79rem;
-  line-height: 1.55;
-  color: var(--text-muted);
-  max-width: 78ch;
-}
-
-/* ---------- runtime panel ---------- */
-
-.runtime-panel {
-  margin-top: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.runtime-panel > summary {
-  cursor: pointer;
-  padding: 12px 16px;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.runtime-panel > summary i {
-  color: var(--text-faint);
-}
-
-.runtime-summary {
-  margin-left: auto;
-  font-weight: 400;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
-.runtime-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 14px;
-  padding: 0 16px 16px;
-}
-
-.runtime-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
-  padding: 12px 14px;
-  min-width: 0;
-}
-
-.runtime-card-wide {
-  grid-column: 1 / -1;
-}
-
-.runtime-card h3 {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-faint);
-  margin: 0 0 8px;
-}
-
-.runtime-card dl {
-  margin: 0;
-  display: grid;
-  grid-template-columns: minmax(78px, auto) 1fr;
-  gap: 4px 12px;
-  font-size: 0.85rem;
-}
-
-.runtime-card dt {
-  color: var(--text-muted);
-  font-weight: 500;
-}
-
-.runtime-card dd {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.pill {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-}
-
-.pill-ok {
-  background: var(--ok-soft);
-  border-color: var(--ok);
-  color: var(--ok);
-}
-
-.pill-wait {
-  background: var(--warn-soft);
-  border-color: var(--warn);
-  color: var(--warn);
-}
-
-.mini-table {
-  width: 100%;
-  margin-top: 10px;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-
-.mini-table th,
-.mini-table td {
-  padding: 4px 8px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-
-.mini-table thead th {
-  color: var(--text-faint);
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.7rem;
-  letter-spacing: 0.05em;
 }
 
 /* ---------- footer ---------- */

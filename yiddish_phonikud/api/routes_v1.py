@@ -445,10 +445,10 @@ def resolve_runtime(runtime_id: str) -> Runtime:
 
     A per-request `runtime` does NOT change what the process has loaded. It used
     to: `SpeechBody.runtime` went through the same loader `POST /v1/models/load`
-    uses, so one caller asking for `piper_yi` left every other caller's
-    `/v1/voices`, `/v1/models/state` and default sample rate switched to Piper —
+    uses, so one caller asking for another runtime left every other caller's
+    `/v1/voices`, `/v1/models/state` and default sample rate switched with it —
     and the next request that named a Blue voice got `400 unknown voice
-    'female' for runtime piper_yi`. `runtimes.instance()` keeps a small
+    a voice that runtime does not have`. `runtimes.instance()` keeps a small
     per-id cache instead and leaves the resident runtime alone; `/v1/models/load`
     remains the only way to change process state.
 
@@ -828,10 +828,9 @@ async def languages() -> LanguagesResponse:
         "The authoritative closed inventory the G2P may emit, split into vowels, "
         "consonants, and marks. When a runtime is loaded, "
         "`runtime_vocab_missing` lists inventory units the acoustic model's "
-        "vocabulary lacks — empty for BlueTTS 2.5, which carries the whole "
-        "inventory natively; `ʧ` and `ʤ` for the legacy Piper voice, where they "
-        "are folded to `tʃ`/`dʒ` before synthesis and are therefore informative "
-        "rather than an error."
+        "vocabulary lacks. It is empty for blue-yi, which carries the whole "
+        "inventory natively — including the single-codepoint affricates `ʦ`, "
+        "`ʧ` and `ʤ` — so nothing is folded and nothing is dropped."
     ),
 )
 async def phoneme_inventory() -> PhonemeInventoryResponse:
@@ -1026,7 +1025,7 @@ async def phonemize(body: PhonemizeBody) -> Response:
         "runtime's `voices()` — an unknown name is a 400 listing the valid "
         "ones, never a silent substitution. `n_steps`, `cfg_scale` and `seed` "
         "are forwarded to runtimes that have a sampler (BlueTTS 2.5) and "
-        "ignored by those that do not (Piper); `n_steps` is capped so one "
+        "ignored by those that do not; `n_steps` is capped so one "
         "request cannot monopolise the CPU.\n\n"
         "**Dropped units.** Every response carries three headers: `X-Runtime`, "
         "`X-Sample-Rate`, and `X-Dropped-Units` — the **phones** the pipeline "

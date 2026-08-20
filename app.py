@@ -20,7 +20,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from yiddish_phonikud import __version__, engine
-from yiddish_phonikud.api.routes_ui import VOICE_CAVEAT
 from yiddish_phonikud.api.routes_ui import router as ui_router
 from yiddish_phonikud.api.routes_v1 import WarmupState, write_error
 from yiddish_phonikud.api.routes_v1 import router as v1_router
@@ -48,7 +47,10 @@ fixed authority chain (native gold verdicts > corpus-audio corrections > publish
 guesses) converts Yiddish text to a closed IPA inventory. Speech is synthesized from that G2P output
 over your text; the pointing model's guesses are shown, not fed back in.
 
-**Voice**: {VOICE_CAVEAT}
+**Voice**: `blue_yi` — a Yiddish-trained flow-matching checkpoint at 44.1 kHz with four fixed
+voices, whose character vocabulary covers the whole closed Yiddish inventory, so no phone is folded
+or dropped. The bundled speakers are English readers, so expect a foreign colour in vowel quality
+and rhythm; the phonology is Yiddish, the speaker identity is not.
 
 Endpoints: `/` (demo UI), `/docs`, `/redoc`, `/health`, and the `/v1/*` API
 (`/v1/audio/speech`, `/v1/audio/phonemize`, `/v1/audio/diacritize`, `/v1/models/*`,

@@ -9,7 +9,7 @@ Why this bundle is the right acoustic model for Yiddish, and where it is not:
 * Its ``vocab.json`` is char-level and carries the whole Yiddish closed
   inventory natively, affricate ligatures included (``ʦ`` U+02A6 = 155,
   ``ʧ`` U+02A7 = 184, ``ʤ`` U+02A4 = 182, ``ɡ`` U+0261 = 66, ``ŋ`` = 44,
-  ``ˈ`` = 120, ``ː`` = 122). Nothing has to be folded, unlike the Piper voice.
+  ``ˈ`` = 120, ``ː`` = 122). Nothing has to be folded.
 * ``stats.npz`` was exported from ``stats_yiddish.pt`` and ``yi`` is one of the
   checkpoint's declared languages, so the latent statistics are the Yiddish
   ones — but every offered voice is a Hebrew or English reader, so expect

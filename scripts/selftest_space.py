@@ -2,9 +2,8 @@
 """Run this before deploying: python3 scripts/selftest_space.py
 
 Proves the Space is wired correctly — registry, phone inventory, audio packing,
-the Yiddish label stack, both TTS runtimes (BlueTTS 2.5 by default, Piper as the
-fallback), and the HTTP routes — end to end. Exits non-zero on any failure, so it
-works as a Docker build gate.
+the Yiddish label stack, the blue-yi TTS runtime, and the HTTP routes — end to
+end. Exits non-zero on any failure, so it works as a Docker build gate.
 
 Modelled on Phonikud-yi/src/selftest.py, and it carries that file's canaries
 forward: the G2P readings that only the seven generated lexicon tables can
@@ -12,19 +11,19 @@ produce. That check (§4 below) is the deployment guard. A missing table makes
 yiddish_g2p return {} for that table and keep going, so the Space would serve
 plausible-but-wrong Yiddish — פעקל as fɛkl instead of pɛkl — and say nothing.
 
-The Blue 2.5 block (§6) carries the second deployment guard, and it is the more
+The Blue 2.5 block (§5) carries the second deployment guard, and it is the more
 subtle one. Blue's flow-matching pipeline produces audio-shaped float32 of
 exactly the right length even when the 144->24 latent fold is interleaved wrongly
 or the stats.npz denormalization is skipped — the two mistakes most likely to
 ship unnoticed. Shape, peak and duration checks all pass on that garbage. The
 only thing that does not is the physics: each voice's median F0 must land on the
-pitch its model card documents. So §6 estimates F0 with a dependency-free
+pitch its model card documents. So §5 estimates F0 with a dependency-free
 autocorrelation tracker (the same one that validated the port; see
 BLUE25_RECIPE.md §10) and asserts it per voice.
 
 Checks whose third-party dependency is genuinely not installed are SKIPPED with
 a reason instead of failing: this doubles as a quick sanity run on a laptop that
-has neither onnxruntime nor piper-onnx. Anything else is a failure.
+does not have onnxruntime. Anything else is a failure.
 """
 
 from __future__ import annotations
@@ -47,7 +46,6 @@ OPTIONAL_DEPS = frozenset(
     {
         "numpy",
         "onnxruntime",
-        "piper_onnx",
         "fastapi",
         "pydantic",
         "jinja2",
@@ -224,19 +222,16 @@ try:
     from yiddish_phonikud import registry
 
     ids = [m.id for m in registry.runtimes()]
-    check(sorted(ids) == ["blue_yi", "piper_yi"], "both runtimes declared", ", ".join(ids))
-    # Blue 2.5 is the real backend; the Piper voice was the stopgap. Anything
-    # that still defaults to Piper is serving Hebrew-accented Yiddish.
+    check(sorted(ids) == ["blue_yi"], "blue_yi is the whole catalog", ", ".join(ids))
     check(
         registry.DEFAULT_RUNTIME_ID == "blue_yi",
         "default runtime is blue_yi",
         registry.DEFAULT_RUNTIME_ID,
     )
 
-    piper = registry.runtime("piper_yi")
     blue = registry.runtime("blue_yi")
     check(blue is not None and blue.available, "blue_yi available in this build")
-    check(piper is not None and piper.available, "piper_yi still available as the fallback")
+    check(registry.runtime("piper_yi") is None, "no piper_yi manifest survives")
     if blue is not None:
         caps = blue.capabilities
         check(
@@ -260,12 +255,11 @@ try:
                 f"{len(blue.required_files)} files" if not absent
                 else f"MISSING: {', '.join(absent)}",
             )
-    if piper is not None:
-        check(
-            registry.is_installed(piper, ROOT),
-            "piper_yi files installed at the repo root",
-            ", ".join(piper.required_files),
-        )
+    check(
+        blue is not None and registry.is_installed(blue, ROOT),
+        "the blue_yi bundle is installed (hub cache or BLUE25_MODEL_DIR)",
+        f"{len(blue.required_files)} required files" if blue is not None else "",
+    )
 except Exception as exc:  # noqa: BLE001
     check(False, "registry", repr(exc))
 
@@ -298,8 +292,10 @@ try:
     offenders = phones.validate(bad)
     check(offenders == ["ɐ", "θ"], "validate() names the offenders", repr(offenders))
 
-    # A vocab shaped like the shipped Piper voice: every inventory character
-    # except the two single-codepoint affricates.
+    # fold_to_vocab is exercised against a synthetic vocab: every inventory
+    # character except the two single-codepoint affricates. No shipped runtime
+    # needs this — blue_yi's vocab covers everything (§5 asserts it) — but the
+    # folding path stays under test for the next runtime that does not.
     vocab = ({ch for unit in phones.INVENTORY for ch in unit} | {" "}) - {"ʧ", "ʤ"}
     folded, dropped = phones.fold_to_vocab("ʧalnt ʤab mɛnʧ", vocab)
     check(
@@ -495,8 +491,8 @@ try:
     with wave.open(BytesIO(wav)) as w:
         parsed = (w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes())
     check(parsed == (1, 2, 22050, n), "pcm16_wav parses as mono 16-bit PCM", str(parsed))
-    # Blue runs at 44.1 kHz, so the packer must carry the rate it is given
-    # rather than the Piper-era constant.
+    # blue-yi runs at 44.1 kHz, so the packer must carry the rate it is given
+    # rather than a hardcoded constant.
     wav441 = audio.pcm16_wav(tone, 44100)
     with wave.open(BytesIO(wav441)) as w:
         check(w.getframerate() == 44100, "pcm16_wav honours a 44.1 kHz rate", "44100 Hz")
@@ -587,101 +583,7 @@ except Exception as exc:  # noqa: BLE001
 
 
 # ---------------------------------------------------------------------------
-# 5. piper runtime (the fallback) + end to end
-# ---------------------------------------------------------------------------
-section("piper runtime (fallback)")
-try:
-    import numpy as np
-
-    from yiddish_phonikud import audio, phones
-    from yiddish_phonikud import runtimes
-
-    # load_runtime(), not load_default(): the default is Blue now, and this
-    # section must not disturb the process-wide loaded singleton.
-    rt = runtimes.load_runtime("piper_yi")
-    check(rt.id == "piper_yi", "load_runtime('piper_yi') loaded the Piper adapter", rt.id)
-    check(rt.voices() == ["default"], "single-speaker voice list", str(rt.voices()))
-    voice_vocab = rt.vocab()
-    missing_vocab = sorted(
-        unit for unit in phones.INVENTORY
-        if not all(ch in voice_vocab for ch in unit)
-    )
-    # Documented, not incidental: this voice's phoneme_id_map has no ʧ/ʤ.
-    check(
-        missing_vocab == ["ʤ", "ʧ"],
-        "voice vocab lacks exactly ʧ and ʤ",
-        " ".join(missing_vocab) or "nothing missing",
-    )
-
-    result = rt.synthesize(CANARY_IPA, speed=1.0)
-    # The tuple contract: dropped units are RETURNED, never stashed on the
-    # instance. A per-instance attribute on a process-wide singleton let
-    # concurrent requests read each other's report.
-    check(
-        isinstance(result, tuple) and len(result) == 2
-        and isinstance(result[0], np.ndarray) and isinstance(result[1], list),
-        "piper synthesize() returns (ndarray, list)",
-        f"{type(result).__name__} of "
-        f"({type(result[0]).__name__}, {type(result[1]).__name__})"
-        if isinstance(result, tuple) and len(result) == 2 else repr(type(result)),
-    )
-    samples, dropped = result
-    check(
-        not hasattr(rt, "last_dropped"),
-        "piper runtime exposes no last_dropped",
-        "dropped units come back from synthesize()",
-    )
-    ok_array = (
-        isinstance(samples, np.ndarray)
-        and samples.dtype == np.float32
-        and samples.ndim == 1
-        and samples.size > 0
-        and float(np.max(np.abs(samples))) <= 1.0
-    )
-    check(
-        ok_array,
-        "synthesize() returns float32 mono in [-1, 1]",
-        f"{samples.size} samples, peak {float(np.max(np.abs(samples))):.3f}, "
-        f"dtype {samples.dtype}, dropped={dropped}",
-    )
-    check(
-        rt.sample_rate == 22050,
-        "runtime reports its sample rate",
-        f"{rt.sample_rate} Hz "
-        f"({samples.size / max(rt.sample_rate, 1):.2f} s of audio)",
-    )
-
-    # Blue's extra options travel through the shared **options tail, so the
-    # fallback has to swallow them instead of raising TypeError on a request
-    # that was written for the default runtime.
-    try:
-        extra, _ = rt.synthesize(
-            CANARY_IPA, speed=1.0, n_steps=8, cfg_scale=4.0, seed=1234
-        )
-        tolerated = extra.size > 0
-        why = f"{extra.size} samples"
-    except TypeError as exc:
-        tolerated, why = False, repr(exc)
-    check(tolerated, "piper ignores blue's n_steps/cfg_scale/seed options", why)
-
-    wav = audio.pcm16_wav(samples, rt.sample_rate)
-    with wave.open(BytesIO(wav)) as w:
-        frames, rate = w.getnframes(), w.getframerate()
-    check(
-        frames == samples.size and rate == rt.sample_rate,
-        "end to end: IPA -> samples -> parseable WAV",
-        f"{frames} frames @ {rate} Hz",
-    )
-except Exception as exc:  # noqa: BLE001
-    dep = missing_dep(exc)
-    if dep:
-        skip("piper runtime", f"{dep} not installed")
-    else:
-        check(False, "piper runtime", repr(exc))
-
-
-# ---------------------------------------------------------------------------
-# 6. blue 2.5 runtime (the default) — THE SECOND DEPLOYMENT GUARD
+# 5. blue-yi runtime (the default) — THE SECOND DEPLOYMENT GUARD
 # ---------------------------------------------------------------------------
 section("blue-yi runtime (default)")
 try:
@@ -704,12 +606,12 @@ try:
         ", ".join(voices),
     )
 
-    # --- vocab coverage: Blue's headline advantage over Piper ---------------
-    # Piper needs ʧ->tʃ and ʤ->dʒ folds. Blue needs none: every character of the
-    # closed inventory, affricates included, is a single id in vocab.json's
-    # char_to_id. Assert ZERO missing — a regression here (a stale v2 bundle, a
+    # --- vocab coverage ------------------------------------------------------
+    # Every character of the closed inventory, affricates included, is a single
+    # id in vocab.json's char_to_id, so nothing is ever folded or dropped for
+    # this runtime. Assert ZERO missing — a regression here (a stale bundle, a
     # vocab read through the wrong key) would be silent, because fold_to_vocab
-    # would quietly start folding again and the audio would still play.
+    # would quietly start folding and the audio would still play.
     blue_vocab = blue_rt.vocab()
     blue_missing = sorted(
         unit for unit in phones.INVENTORY
@@ -964,24 +866,32 @@ try:
         "runtimes.state() reports the loaded blue runtime",
         f"{runtimes.state()}",
     )
-    # A per-request `runtime` must serve that request only. Routing it through
-    # the loader made one caller's choice process-global: /v1/voices and
-    # /v1/models/state switched for everybody, and the next request naming a
-    # Blue voice got `unknown voice 'female' for runtime piper_yi`.
-    pinned = runtimes.instance("piper_yi")
+    # A per-request `runtime` must serve that request only and must never swap
+    # the process-wide singleton. With one runtime in the catalog the only
+    # remaining ways to reach instance() are the resident id and an unknown one:
+    # the first must hand back the resident object rather than rebuild sessions,
+    # and the second must raise without disturbing what is loaded.
     still = runtimes.loaded()
     check(
-        pinned.id == "piper_yi"
-        and still is not None and still.id == "blue_yi"
-        and runtimes.state().get("sample_rate") == 44100,
-        "instance() serves another runtime without swapping the loaded one",
-        f"instance -> {pinned.id} @ {pinned.sample_rate}, loaded -> {still.id if still else None}",
+        runtimes.instance("blue_yi") is still,
+        "instance() hands back the resident runtime for its own id",
+        "no session rebuild per request",
     )
+    try:
+        runtimes.instance("piper_yi")
+        raised = "no exception"
+    except runtimes.RuntimeNotAvailable as exc:
+        raised = type(exc).__name__
+    except Exception as exc:  # noqa: BLE001
+        raised = repr(exc)
+    after = runtimes.loaded()
     check(
-        runtimes.instance("piper_yi") is pinned
-        and runtimes.instance("blue_yi") is still,
-        "instance() caches per id and hands back the resident runtime for its own id",
-        "no session rebuild per alternating request",
+        raised == "RuntimeNotAvailable"
+        and after is still
+        and runtimes.state().get("runtime") == "blue_yi"
+        and runtimes.state().get("sample_rate") == 44100,
+        "instance() rejects an unknown runtime without touching the loaded one",
+        f"{raised}, loaded -> {after.id if after else None}",
     )
 except Exception as exc:  # noqa: BLE001
     dep = missing_dep(exc)
@@ -992,7 +902,7 @@ except Exception as exc:  # noqa: BLE001
 
 
 # ---------------------------------------------------------------------------
-# 7. the pipeline — the authority chain, one pass, one pointing call
+# 6. the pipeline — the authority chain, one pass, one pointing call
 #
 # This is the block that guards the review's CRITICAL finding (C1). Every other
 # check here can pass while the routes quietly feed the v5 pointing model's
@@ -1116,7 +1026,7 @@ except Exception as exc:  # noqa: BLE001
 
 
 # ---------------------------------------------------------------------------
-# 8. app routes — the census, both directions against docs/API.md
+# 7. app routes — the census, both directions against docs/API.md
 # ---------------------------------------------------------------------------
 section("app")
 try:

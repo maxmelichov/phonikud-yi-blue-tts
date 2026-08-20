@@ -29,8 +29,8 @@ Yiddish text goes in; nikud, IPA and audio come out. The linguistic work is done
 text → nikud → IPA stack adapted from *Phonikud*
 ([arXiv 2506.12311](https://arxiv.org/abs/2506.12311)) — and the waveform by
 [**blue-yi**](https://huggingface.co/notmax123/blue-yi), a flow-matching ONNX
-model at 44.1 kHz with four saved voices. A 22.05 kHz Piper voice stays in the image as a
-lightweight fallback. Read [Limitations](#limitations) before you judge the audio.
+model at 44.1 kHz with four saved voices. Read [Limitations](#limitations) before you judge
+the audio.
 
 The engine (~1.23 GB, including the v5 pointing model) and the acoustic bundle (~281 MB) are
 pulled with `huggingface_hub` on a background thread at startup, so the page serves
@@ -56,9 +56,8 @@ so those two words come out as they are actually said:
 
 Every IPA string in this file that is presented as this stack's output was produced by running
 the engine, not written by hand. The counter-examples are labelled as such where they appear:
-`ʃbs` (שבת read letter for letter), `fɛkl` (פעקל with the lexicon tables missing), `hot` (another
-dialect's reading), and `tʃ`/`dʒ` (what `phones.fold_to_vocab` writes for the Piper voice, not
-what the G2P emits).
+`ʃbs` (שבת read letter for letter), `fɛkl` (פעקל with the lexicon tables missing), and `hot`
+(another dialect's reading).
 
 ## Three input modes
 
@@ -75,8 +74,8 @@ decoration: `א` alone is `a`, `אָ` is `u`; `פאר` is `far`, `פּאר` is `
 unpointed the engine's own authority chain decides, and the v5 pointing model's output is
 shown for inspection rather than fed forward.
 
-Hand-written IPA is still validated against the closed inventory and folded to the voice's
-vocabulary — nothing bypasses those checks.
+Hand-written IPA is still validated against the closed inventory — nothing bypasses that
+check.
 
 ## The closed phone inventory
 
@@ -96,10 +95,9 @@ the units the loaded voice's vocabulary lacks. For **blue-yi that list is empty*
 character vocab carries every unit of the inventory, marks included, so every phone reaches the
 model unfolded and none is dropped. (Phones. A few punctuation characters the engine passes
 through — `[ ] ׃ „ ‚ ‹ › | < > { }` — are outside that vocab and are removed silently; they
-carry no phonetic content and are not reported.) For the **Piper fallback** the list is `ʧ` and
-`ʤ`, which are folded to `tʃ` and `dʒ` before synthesis. A fold is not a loss, so it is reported
-here and in `runtime_vocab_missing`, not in `unsupported` — `unsupported` names only units that
-reached no model at all.
+carry no phonetic content and are not reported.) `runtime_vocab_missing` is the field to read
+for "this voice cannot say that phone"; it is empty for every runtime this build ships.
+`unsupported` is a different thing again — it names only units that reached no model at all.
 
 ## API
 
@@ -206,12 +204,8 @@ runtime?):
   Yiddish is one of the checkpoint's declared languages and its latent statistics were
   exported from `stats_yiddish.pt`. Its character vocab covers the Yiddish inventory outright.
   Two extra options are accepted: `n_steps` (default 8) and `cfg_scale` (default 4.0).
-- **`piper_yi`** — *the fallback.* The Piper ONNX voice committed beside `app.py`, 61 MB,
-  **22.05 kHz**, single speaker, and much cheaper to load. It ignores `n_steps` and
-  `cfg_scale`.
-
-Sample rate therefore depends on the loaded runtime; `GET /v1/models/state` reports it and
-nothing should hard-code it.
+One runtime ships today, so the catalog has one entry. `GET /v1/models/state` reports the
+loaded runtime's sample rate and nothing should hard-code it.
 
 `n_steps` is how many flow-matching steps the vector estimator runs — more steps sound better
 and take longer. Measured on this machine for about 1.2 s of audio: **4 steps 121 ms, 8 steps
@@ -248,18 +242,14 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
 ## Limitations
 
 - **The voices are not Yiddish readers.** blue-yi knows the phones — every unit of the
-  Yiddish inventory is in its vocab, so nothing is folded or dropped — but all five bundled
-  speakers are Hebrew or English readers. Expect a foreign accent, mostly in vowel colour and
+  Yiddish inventory is in its vocab, so nothing is folded or dropped — but all four bundled
+  speakers are English readers. Expect a foreign accent, mostly in vowel colour and
   rhythm. A natively-read Yiddish voice would need new recordings and is future work.
 - **No accuracy number is claimed, here or anywhere in this Space.** The source project
   records that no measured word-error or accuracy figure exists for this stack; the figures
   quoted informally there are estimates, not measurements. Any number presented as measured
   would be a fabrication. The per-token table exists so you can audit readings yourself
   instead of trusting an aggregate.
-- **The Piper fallback is Hebrew-trained.** `model.onnx` is a Piper voice trained on Modern
-  Hebrew speech and driven with Yiddish IPA. It is not a Yiddish voice: expect Hebrew-inflected
-  vowel quality, prosody and rhythm, and `ʧ`/`ʤ` folded to `tʃ`/`dʒ` because its
-  `phoneme_id_map` lacks them. Every fold is reported in `unsupported`.
 - **One dialect.** Hasidic Unterland/Central Yiddish only. Litvish, Poylish and YIVO-standard
   readings are wrong here by design (`hut`, not `hot`).
 - **LOW-confidence tokens are the review queue.** Unsettled words get the engine's best answer
@@ -274,9 +264,9 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
   characters and the pieces are concatenated with a 60 ms gap. Streaming emits those same
   chunks one by one; `stream` changes delivery, never the audio. A request is capped at 4000
   characters, about 3.5 minutes of speech.
-- **No voice cloning.** `voice_reference` is `false` for both runtimes. Blue's bundle ships
-  frozen style vectors and no autoencoder encoder, so there is no way to make a sixth voice
-  from a recording here.
+- **No voice cloning.** `voice_reference` is `false`. blue-yi's bundle ships frozen style
+  vectors and no autoencoder encoder, so there is no way to make a fifth voice from a
+  recording here.
 - **Cold start is slow.** The first request after a restart waits on the engine and acoustic
   downloads; `GET /health` reports `engine_loaded`, `runtime_loaded` and any warm-up error, so
   you can poll for readiness and tell warming from broken.
@@ -287,7 +277,6 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
   ([arXiv 2506.12311](https://arxiv.org/abs/2506.12311)), the method this stack adapts.
 - **phonikud-yi** — the Yiddish G2P engine, gold lexicon and v5 pointing model:
   [notmax123/phonikud-yi-engine](https://huggingface.co/notmax123/phonikud-yi-engine).
-- **blue-yi** — the default acoustic model:
+- **blue-yi** — the acoustic model:
   [notmax123/blue-yi](https://huggingface.co/notmax123/blue-yi).
-- **Piper** — the fallback ONNX synthesis runtime, via `piper-onnx`.
 - The gold lexicon exists because a native speaker sat down and ruled on it word by word.

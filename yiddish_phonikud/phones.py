@@ -178,7 +178,7 @@ def validate(ipa: str) -> list[str]:
 # ---------------------------------------------------------------------------
 #
 # Candidates are tried in order; the first whose EVERY CHARACTER is in the vocab
-# wins. Per-character is the right test because a Piper voice's vocabulary is a
+# wins. Per-character is the right test because such a vocabulary is a
 # `phoneme_id_map` keyed by single characters -- "tʃ" is not an entry, it is the
 # entries "t" and "ʃ" used back to back.
 #
@@ -187,7 +187,7 @@ def validate(ipa: str) -> list[str]:
 # rules for units the vocab lacks) and documents the intended precedence: keep
 # the true phone, degrade only as far as necessary.
 FOLD_RULES: dict[str, tuple[str, ...]] = {
-    # REQUIRED for the shipped Piper voice: its phoneme_id_map has ʦ, ʃ, ʒ, ɡ,
+    # Kept for any voice whose vocab lacks the single-codepoint affricates:
     # ŋ, ə, ɛ, ɔ, x, ˈ, ː -- but no ʧ and no ʤ. Without these two folds every
     # word with a tsh/dzh (ʧ, ʤ) loses a consonant. There is no rule for a bare
     # ː because a bare ː is not a unit (see MARKS); "aː" is the unit and its
@@ -228,7 +228,7 @@ def fold_to_vocab(ipa: str, vocab: Collection[str]) -> tuple[str, list[str]]:
     they carry no phonetic content, so a vocab that cannot represent them loses
     nothing a listener could hear. Reporting them was a real defect, not a
     cosmetic one -- blue_yi's char vocab has no `[ ] ׃ „ ‚ ‹ › | < > { }` and
-    piper's additionally has no `… « » * / \\`, while the engine deliberately
+    a narrower map additionally has no `… « » * / \\`, while the engine
     passes all of them through in lead/trail, so ordinary bracketed or
     sof-pasuq Yiddish (`[ ]` alone occurs 234 times in the corpus census) came
     back as `X-Dropped-Units: %5B %5D` and lit the UI's "the audio does not

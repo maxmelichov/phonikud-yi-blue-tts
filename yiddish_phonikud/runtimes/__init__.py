@@ -4,9 +4,8 @@ Ported from mambotts-server/src/runtime/mod.rs: one narrow trait every
 acoustic back end implements, plus a loader that turns a registry manifest
 into a live instance. A runtime declared in the catalog but not implemented
 in this build fails loudly the way `RuntimeParams::QwenHe` does when the
-`qwen` feature is off -- it never pretends to be present. Both catalog
-runtimes are implemented here: blue_yi (default, blue-yi from the
-Hugging Face hub) and piper_yi (the committed lightweight fallback).
+`qwen` feature is off -- it never pretends to be present. One runtime is
+implemented here: blue_yi (blue-yi from the Hugging Face hub).
 """
 
 from __future__ import annotations
@@ -24,7 +23,9 @@ if TYPE_CHECKING:  # numpy is only needed for the annotation, not at import
 
 logger = logging.getLogger(__name__)
 
-# The Space repo root: model.onnx / model.config.json sit next to the package.
+# The Space repo root. Every bundle in this build is fetched from the hub, so
+# this is only the default `root` for a manifest that ships files beside the
+# package -- none does today.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -69,7 +70,7 @@ class Runtime(Protocol):
 
         ``speed`` > 1.0 is faster. ``**options`` is per-runtime and optional;
         blue_yi accepts ``n_steps``, ``cfg_scale``, ``pace_blend`` and
-        ``seed``, piper_yi accepts none and ignores extras.
+        ``seed``; a runtime that does not use an option ignores it.
         """
 
 
@@ -82,20 +83,6 @@ _loaded: Runtime | None = None
 # which one is the process default; this dict is what makes a per-request
 # `runtime` switch possible WITHOUT changing that default (see `instance`).
 _instances: dict[str, Runtime] = {}
-
-
-def _resolve_files(manifest: registry.RuntimeManifest, root: Path) -> tuple[dict[str, Path], list[str]]:
-    """Locates every required file, tolerating both root and root/directory."""
-    found: dict[str, Path] = {}
-    missing: list[str] = []
-    for name in manifest.required_files:
-        for candidate in (root / manifest.directory / name, root / name):
-            if candidate.is_file():
-                found[name] = candidate
-                break
-        else:
-            missing.append(name)
-    return found, missing
 
 
 def load_runtime(runtime_id: str, root: Path | None = None) -> Runtime:
@@ -133,28 +120,12 @@ def load_runtime(runtime_id: str, root: Path | None = None) -> Runtime:
                 f"runtime `{manifest.id}` could not load {manifest.hf_repo_id}: {exc}",
             ) from exc
 
-    files, missing = _resolve_files(manifest, root)
-    if missing:
-        raise RuntimeNotAvailable(
-            RuntimeUnavailableReason.MISSING_FILES,
-            f"runtime `{manifest.id}` is missing {', '.join(missing)} "
-            f"under {root}; download it from the registry entry's file list",
-        )
-
-    if manifest.id != "piper_yi":
-        # available=True with no adapter would be the pretence qwen.rs avoids.
-        raise RuntimeNotAvailable(
-            RuntimeUnavailableReason.NOT_IMPLEMENTED,
-            f"runtime `{manifest.id}` has no adapter in this build",
-        )
-
-    from .piper_yi import PiperYiddish  # imported late: pulls in onnxruntime
-
-    return PiperYiddish(
-        model_path=files["model.onnx"],
-        config_path=files["model.config.json"],
-        runtime_id=manifest.id,
-        model_name=manifest.name,
+    # Every registered runtime is fetched from the hub; a manifest that reaches
+    # here is declared available with no adapter behind it, which is the
+    # pretence qwen.rs avoids.
+    raise RuntimeNotAvailable(
+        RuntimeUnavailableReason.NOT_IMPLEMENTED,
+        f"runtime `{manifest.id}` has no adapter in this build",
     )
 
 
@@ -179,10 +150,10 @@ def instance(runtime_id: str, root: Path | None = None) -> Runtime:
 
     This is what a per-request `runtime` field resolves through. Routing it
     through `load()` instead made one caller's choice process-global: a single
-    `POST /v1/audio/speech {"runtime": "piper_yi"}` left `/v1/voices`,
+    `POST /v1/audio/speech {"runtime": "<other>"}` left `/v1/voices`,
     `/v1/models/state` and the default sample rate switched for everybody, and
     the next request naming a Blue voice failed with `unknown voice 'female' for
-    runtime piper_yi`. Instances are cached per id, so alternating requests do
+    that runtime`. Instances are cached per id, so alternating requests do
     not rebuild sessions either.
     """
     wanted = (runtime_id or registry.DEFAULT_RUNTIME_ID).strip() or registry.DEFAULT_RUNTIME_ID

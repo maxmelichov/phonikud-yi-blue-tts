@@ -5,16 +5,16 @@
 #   scripts/e2e_check.sh [PORT]
 #
 # It starts its own server on PORT (default 7863) unless one is already
-# answering there, exercises every documented endpoint on BOTH runtimes
-# (BlueTTS 2.5 at 44.1 kHz, the Piper fallback at 22.05 kHz), decodes the
-# streaming frame headers from the raw bytes, and verifies each WAV header with
+# answering there, exercises every documented endpoint on the one runtime this
+# build ships (blue-yi at 44.1 kHz), decodes the streaming frame headers from
+# the raw bytes, and verifies each WAV header with
 # the standard library's `wave` module — no dependency beyond requirements.txt,
 # which deliberately does not ship soundfile. Exits non-zero on the first
 # failure.
 #
 # PHONIKUD_YI_ENGINE_DIR points at an unpacked engine bundle and skips the
 # ~1.23 GB snapshot download; BLUE25_MODEL_DIR does the same for the ~282 MB
-# BlueTTS 2.5 bundle. Both are auto-detected below when they are already on
+# blue-yi bundle. Both are auto-detected below when they are already on
 # this machine. Without them the first request pays for the fetch.
 set -euo pipefail
 
@@ -25,16 +25,16 @@ PY="${ROOT}/.venv/bin/python"
 OUT="${OUT_DIR:-/tmp}"
 SAMPLE='מיט א פאר יאר צוריק'
 PARAGRAPH='דער בעל־הבית האט געזאגט אז מען וועט מאכן א גרויסע שמחה. די קינדער שפילן זיך אין דרויסן, און די מאמע רופט זיי אריין. וואס האט ער געזאגט? מיט א פאר יאר צוריק איז דאס געווען אנדערש; היינט איז אלעס אנדערש. א דאנק פאר די גוטע נייעס, איך האב געהערט אז ער וועט קומען מארגן.'
-# Two of Blue's five fixed voices, one male one female: the pair whose F0
+# Two of blue-yi's four fixed voices, one male one female: the pair whose F0
 # separation the selftest asserts, so different audio here is meaningful.
-VOICE_A='libri_male_6209'
-VOICE_B='libri_female_6147'
+VOICE_A='Berl'
+VOICE_B='Rukhl'
 
 [ -x "$PY" ] || { echo "no venv at ${ROOT}/.venv — python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"; exit 2; }
 
 # Local bundles, so a repeat run never touches the network.
 LOCAL_ENGINE="$(cd "${ROOT}/.." 2>/dev/null && pwd)/Phonikud-yi/dist/phonikud-yi-engine"
-LOCAL_BLUE="${HOME}/.cache/huggingface/hub/models--notmax123--BlueTTS2.5-onnx/snapshots/468da64b4a51795a7594a3637727dbaf876b6df2"
+LOCAL_BLUE="${HOME}/.cache/huggingface/hub/models--notmax123--blue-yi/snapshots/34ee8856b85043b68cfbcaf0b3acad4c20326f88"
 if [ -z "${PHONIKUD_YI_ENGINE_DIR:-}" ] && [ -f "${LOCAL_ENGINE}/yiddish_labels.py" ]; then
   export PHONIKUD_YI_ENGINE_DIR="$LOCAL_ENGINE"
 fi
@@ -135,17 +135,17 @@ echo "== GET /v1/models/state (must report blue at 44100) =="
 jget /v1/models/state 200
 jassert 'd["loaded"] is True and d["runtime"] == "blue_yi" and d["sample_rate"] == 44100' 'state reports blue_yi @ 44100 Hz'
 
-echo "== GET /v1/voices (blue has five fixed voices) =="
+echo "== GET /v1/voices (blue-yi has four fixed voices) =="
 jget /v1/voices 200
-jassert 'd["runtime"] == "blue_yi" and len(d["voices"]) == 5' 'five voices'
-jassert 'sorted(d["voices"]) == ["female","libri_female_1088","libri_female_6147","libri_male_6209","libri_male_8088"]' 'the five voices are the bundled ones'
+jassert 'd["runtime"] == "blue_yi" and len(d["voices"]) == 4' 'four voices'
+jassert 'sorted(d["voices"]) == ["Berl","Hershl","Rukhl","Sheyndl"]' 'the four voices are the bundled ones'
 
 echo "== GET /v1/languages =="
 jget /v1/languages 200
 
 echo "== GET /v1/phonemes/inventory (blue folds nothing: runtime_vocab_missing must be empty) =="
 jget /v1/phonemes/inventory 200
-jassert 'd["runtime_vocab_missing"] == []' 'blue vocab covers the whole Yiddish inventory'
+jassert 'd["runtime_vocab_missing"] == []' 'blue-yi vocab covers the whole Yiddish inventory'
 
 echo "== POST /v1/audio/diacritize =="
 json_body "$SAMPLE" > "${OUT}/req.json"
@@ -154,7 +154,7 @@ jpost /v1/audio/diacritize "$(cat "${OUT}/req.json")" 200
 echo "== POST /v1/audio/phonemize =="
 jpost /v1/audio/phonemize "$(cat "${OUT}/req.json")" 200
 jassert 'd["phonemes"] == "mit a pˈur jur ʦirˈik"' 'the canary phonemization is unchanged'
-jassert 'd["unsupported"] == []' 'nothing unsupported under blue'
+jassert 'd["unsupported"] == []' 'nothing unsupported under blue-yi'
 echo "== POST /v1/audio/phonemize (blank input -> 400) =="
 jpost /v1/audio/phonemize '{"input":"  "}' 400
 jassert 'd["error"]["code"] == "invalid_request"' 'blank input is an ErrorBody, not FastAPI detail'
@@ -370,41 +370,41 @@ DROPPED
 wav_report "${OUT}/yi_punct.wav" 44100
 
 echo "== a per-request runtime must NOT change what the process has loaded =="
+# One runtime ships, so the swap this used to make (blue -> the fallback -> blue)
+# has nowhere to go. What is still worth proving is the plumbing around it: a
+# per-request `runtime` naming the resident runtime is served normally, one
+# naming anything else is a 400 rather than a crash or a silent fallback, and
+# neither leaves the process pointing somewhere new.
 jget /v1/models/state 200
-jassert 'd["runtime"] == "blue_yi"' 'blue_yi is resident before the pinned piper request'
-json_body "$SAMPLE" '{"runtime":"piper_yi"}' > "${OUT}/req_pin.json"
+jassert 'd["runtime"] == "blue_yi"' 'blue_yi is resident before the pinned request'
+json_body "$SAMPLE" '{"runtime":"blue_yi"}' > "${OUT}/req_pin.json"
 code=$(curl -s -o "${OUT}/yi_pinned.wav" -w '%{http_code}' -X POST "${BASE}/v1/audio/speech" \
          -H 'content-type: application/json' --data-binary "@${OUT}/req_pin.json")
 [ "$code" = "200" ] || { echo "!! pinned-runtime request returned $code"; exit 1; }
-wav_report "${OUT}/yi_pinned.wav" 22050
+wav_report "${OUT}/yi_pinned.wav" 44100
+json_body "$SAMPLE" '{"runtime":"no_such_runtime"}' > "${OUT}/req_gone.json"
+jpost /v1/audio/speech "$(cat "${OUT}/req_gone.json")" 400
+jassert 'd["error"]["code"] == "invalid_request"' 'a runtime this build does not have is a 400, not a fallback'
 jget /v1/models/state 200
-jassert 'd["runtime"] == "blue_yi" and d["sample_rate"] == 44100' 'the pinned request left blue_yi resident'
+jassert 'd["runtime"] == "blue_yi" and d["sample_rate"] == 44100' 'the pinned requests left blue_yi resident'
 jget /v1/voices 200
-jassert 'len(d["voices"]) == 5' 'and left the five Blue voices on offer'
-json_body "$SAMPLE" '{"voice":"female"}' > "${OUT}/req_after.json"
+jassert 'len(d["voices"]) == 4' 'and left the four blue-yi voices on offer'
+json_body "$SAMPLE" '{"voice":"Hershl"}' > "${OUT}/req_after.json"
 after_code=$(curl -s -o "${OUT}/yi_after.wav" -w '%{http_code}' -X POST "${BASE}/v1/audio/speech" \
          -H 'content-type: application/json' --data-binary "@${OUT}/req_after.json")
-[ "$after_code" = "200" ] || { echo "!! a Blue voice failed after a pinned Piper request: $after_code"; exit 1; }
+[ "$after_code" = "200" ] || { echo "!! a blue-yi voice failed after the pinned requests: $after_code"; exit 1; }
 wav_report "${OUT}/yi_after.wav" 44100
 
-echo "== POST /v1/models/load piper_yi (the fallback must still work, at 22.05 kHz) =="
-jpost /v1/models/load '{"runtime":"piper_yi"}' 200
-jget /v1/models/state 200
-jassert 'd["runtime"] == "piper_yi" and d["sample_rate"] == 22050' 'the fallback swapped in at 22050 Hz'
-jget /v1/phonemes/inventory 200
-jassert 'sorted(d["runtime_vocab_missing"]) == ["ʤ","ʧ"]' 'piper still lacks exactly ʧ and ʤ'
-code=$(curl -s -o "${OUT}/yi_piper.wav" -w '%{http_code}' -X POST "${BASE}/v1/audio/speech" \
-         -H 'content-type: application/json' --data-binary "@${OUT}/req.json")
-[ "$code" = "200" ] || { echo "!! piper speech returned $code"; exit 1; }
-wav_report "${OUT}/yi_piper.wav" 22050
-
-echo "== POST /v1/models/load blue_yi (swap back; the rest of the run is on the default) =="
+echo "== POST /v1/models/load blue_yi (an explicit load; state must follow) =="
 jpost /v1/models/load '{"runtime":"blue_yi"}' 200
+jassert 'd["runtime"] == "blue_yi"' 'the explicit load reports blue_yi'
+jget /v1/models/state 200
+jassert 'd["loaded"] is True and d["runtime"] == "blue_yi" and d["sample_rate"] == 44100' 'state follows the explicit load'
 
 echo "== GET / (demo UI) =="
 code=$(curl -s -o "${OUT}/index.html" -w '%{http_code}' "${BASE}/")
 [ "$code" = "200" ] || { echo "!! / returned $code"; exit 1; }
-grep -qi "voice" "${OUT}/index.html" || { echo "!! voice caveat missing from the page"; exit 1; }
+grep -q "voice-select" "${OUT}/index.html" || { echo "!! the voice picker is missing from the page"; exit 1; }
 echo "ok  $(wc -c < "${OUT}/index.html") bytes"
 
 echo "== GET /docs + /openapi.json =="

@@ -1,8 +1,12 @@
 /* Yiddish Phonikud TTS — demo front end.
 
-   Reads the live server state (GET /v1/models/sources, /v1/models/state, /v1/voices)
-   to populate the runtime and voice pickers, then posts a FormData to POST /generate
-   and renders the nikud, the IPA, the per-token derivation table, and the audio.
+   Reads the live server state (GET /v1/models/state, GET /v1/voices) to populate
+   the voice picker, then posts a FormData to POST /generate and renders the
+   nikud, the IPA, the per-token derivation table, and the audio.
+
+   There is one runtime in this build, so nothing here picks one: no runtime
+   picker, no POST /v1/models/load, and no per-runtime branching — every branch
+   of that kind had exactly one reachable arm.
 
    Every response key touched here is one the API actually returns: the /generate
    payload (nikud, diacritics, phonemes, audio, tokens, unsupported) and TokenRowDTO
@@ -30,11 +34,6 @@ const ROUTE_TOOLTIP = {
   fallback:
     "Quarantined: the engine judged the output unfit to emit (a vowel-less loshn-koydesh skeleton, an unlexiconed unpointed LK word, or an out-of-inventory token such as a number or a URL). Only its punctuation reaches the spoken string.",
 };
-
-// Runtimes whose ids start with this take the flow-matching options. Kept as a
-// prefix test rather than a hardcoded id so blue_yi_* variants keep working; the
-// server is still the authority — it ignores options a runtime does not use.
-const BLUE_PREFIX = "blue";
 
 const el = (id) => document.getElementById(id);
 
@@ -65,8 +64,6 @@ function setBusy(busy) {
     const button = el(mode + "-btn");
     if (button) button.disabled = busy;
   });
-  const runtimeSelect = el("runtime-select");
-  if (runtimeSelect) runtimeSelect.disabled = busy;
 }
 
 async function errorMessage(response) {
@@ -88,91 +85,7 @@ async function getJSON(url) {
   return response.json();
 }
 
-/* ---------------- runtime / voice pickers ---------------- */
-
-// Last state read from GET /v1/models/state, so nothing on the page claims a
-// runtime, voice list or sample rate the server did not report.
-const serverState = { runtime: "", sampleRate: 0, voices: [], catalog: [] };
-
-function selectedRuntime() {
-  const select = el("runtime-select");
-  return select && select.value ? select.value : serverState.runtime;
-}
-
-function isBlue(runtimeId) {
-  return (runtimeId || "").startsWith(BLUE_PREFIX);
-}
-
-function updateCaveat(runtimeId) {
-  const blue = el("caveat-blue");
-  const piper = el("caveat-piper");
-  if (!blue || !piper) return;
-  const showBlue = isBlue(runtimeId);
-  blue.style.display = showBlue ? "" : "none";
-  piper.style.display = showBlue ? "none" : "";
-}
-
-function updateAdvancedNote(runtimeId) {
-  const note = el("advanced-note");
-  if (!note) return;
-  note.textContent = isBlue(runtimeId)
-    ? "The selected runtime (" + runtimeId + ") uses both values."
-    : "The selected runtime (" +
-      (runtimeId || "none") +
-      ") ignores both values — they are sent anyway and dropped server-side.";
-}
-
-function updateRuntimeLine() {
-  const line = el("runtime-line");
-  const rate = el("panel-sample-rate");
-  const voices = el("panel-voices");
-  const summary = document.querySelector(".runtime-summary");
-
-  if (line) {
-    if (serverState.runtime) {
-      const rateText = serverState.sampleRate ? " · " + serverState.sampleRate + " Hz" : "";
-      const voiceText = serverState.voices.length
-        ? " · " + serverState.voices.length + (serverState.voices.length === 1 ? " voice" : " voices")
-        : "";
-      line.textContent = "Loaded: " + serverState.runtime + rateText + voiceText;
-    } else {
-      line.textContent = "No runtime loaded yet — the first generate loads the default.";
-    }
-  }
-  if (rate) rate.textContent = serverState.sampleRate ? serverState.sampleRate + " Hz" : "—";
-  if (voices) voices.textContent = serverState.voices.length ? serverState.voices.join(", ") : "—";
-  if (summary) {
-    summary.textContent = serverState.runtime
-      ? serverState.runtime + (serverState.sampleRate ? " · " + serverState.sampleRate + " Hz" : "")
-      : "not loaded yet";
-  }
-}
-
-function fillRuntimeSelect(catalog, current) {
-  const select = el("runtime-select");
-  if (!select) return;
-  if (!catalog.length) {
-    // The catalog fetch failed; the server-rendered options are still valid.
-    return;
-  }
-  select.textContent = "";
-  catalog.forEach((entry) => {
-    const option = document.createElement("option");
-    option.value = entry.id;
-    // `available: false` means the catalog declares it but this build cannot load
-    // it; showing it disabled is honest, hiding it would misrepresent the catalog.
-    option.textContent =
-      (entry.name || entry.id) + (entry.available ? "" : " — not in this build");
-    option.disabled = !entry.available;
-    select.appendChild(option);
-  });
-  if (current && catalog.some((entry) => entry.id === current)) {
-    select.value = current;
-  } else {
-    const firstAvailable = catalog.find((entry) => entry.available);
-    if (firstAvailable) select.value = firstAvailable.id;
-  }
-}
+/* ---------------- voice picker ---------------- */
 
 function fillVoiceSelect(voices, keep) {
   const select = el("voice-select");
@@ -203,78 +116,27 @@ function fillVoiceSelect(voices, keep) {
   select.value = names.indexOf(wanted) >= 0 ? wanted : names[0];
 }
 
-async function refreshState(keepVoice) {
+async function refreshVoices(keepVoice) {
+  // /v1/voices is 503 no_model until a runtime is resident, so ask the state
+  // first and leave the list alone rather than invent one while warming.
   const state = await getJSON("/v1/models/state");
-  serverState.runtime = state.loaded ? state.runtime || "" : "";
-  serverState.sampleRate = state.sample_rate || 0;
-  serverState.voices = [];
-  if (serverState.runtime) {
+  let voices = [];
+  if (state.loaded) {
     try {
       const payload = await getJSON("/v1/voices");
-      serverState.voices = Array.isArray(payload.voices) ? payload.voices : [];
+      voices = Array.isArray(payload.voices) ? payload.voices : [];
     } catch (err) {
-      // 503 no_model while warming: leave the list empty rather than invent one.
-      serverState.voices = [];
+      voices = [];
     }
   }
-  fillVoiceSelect(serverState.voices, keepVoice);
-  updateRuntimeLine();
-  return state;
+  fillVoiceSelect(voices, keepVoice);
 }
 
 async function initControls() {
   try {
-    const sources = await getJSON("/v1/models/sources");
-    serverState.catalog = Array.isArray(sources.runtimes) ? sources.runtimes : [];
-  } catch (err) {
-    serverState.catalog = [];
-  }
-  let loaded = "";
-  try {
-    const state = await refreshState();
-    loaded = state.loaded ? state.runtime || "" : "";
+    await refreshVoices();
   } catch (err) {
     /* /v1/models/state is cheap and never 503s; ignore a transient failure */
-  }
-  fillRuntimeSelect(serverState.catalog, loaded);
-  const chosen = selectedRuntime();
-  updateCaveat(chosen);
-  updateAdvancedNote(chosen);
-}
-
-async function switchRuntime() {
-  const runtimeId = selectedRuntime();
-  updateCaveat(runtimeId);
-  updateAdvancedNote(runtimeId);
-  if (!runtimeId || runtimeId === serverState.runtime) return;
-
-  const line = el("runtime-line");
-  if (line) line.textContent = "Loading " + runtimeId + "…";
-  setBusy(true);
-  try {
-    const response = await fetch("/v1/models/load", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runtime: runtimeId }),
-    });
-    if (!response.ok) {
-      const message = await errorMessage(response);
-      if (line) line.textContent = "✗ " + message;
-      // Snap the picker back to what is actually resident, so the page never
-      // shows a runtime the server refused.
-      const select = el("runtime-select");
-      if (select && serverState.runtime) select.value = serverState.runtime;
-      updateCaveat(selectedRuntime());
-      updateAdvancedNote(selectedRuntime());
-      return;
-    }
-    await refreshState();
-    updateCaveat(serverState.runtime);
-    updateAdvancedNote(serverState.runtime);
-  } catch (err) {
-    if (line) line.textContent = "✗ " + (err && err.message ? err.message : "Network error");
-  } finally {
-    setBusy(false);
   }
 }
 
@@ -433,8 +295,8 @@ async function generate(mode) {
   form.append("mode", mode);
   form.append("text", textValue);
   form.append("phonemes", phonemeValue);
-  // No `runtime` field: /generate always uses the resident runtime, and the
-  // picker switches it explicitly through POST /v1/models/load (see switchRuntime).
+  // No `runtime` field: /generate always uses the resident runtime, which is the
+  // only one this build has.
   form.append("voice", (el("voice-select") && el("voice-select").value) || "");
   form.append("speed", String(numberField("speed-input", 1.0)));
   form.append("n_steps", String(numberField("steps-input", 8)));
@@ -470,18 +332,9 @@ async function generate(mode) {
 
     setStatus(mode, "✓ Done", "ready");
 
-    // /generate reports which runtime, voice and sample rate actually served the
-    // request; show those rather than what the pickers happened to say. The first
-    // generate on a cold Space is also what loads the default runtime, so the
-    // catalog state is re-read afterwards.
-    if (data.runtime) {
-      serverState.runtime = data.runtime;
-      serverState.sampleRate = data.sample_rate || serverState.sampleRate;
-      updateRuntimeLine();
-      updateCaveat(data.runtime);
-      updateAdvancedNote(data.runtime);
-    }
-    refreshState((el("voice-select") && el("voice-select").value) || "").catch(() => {});
+    // The first generate on a cold Space is what loads the runtime, so the
+    // voice list is re-read afterwards — before it, there was none to read.
+    refreshVoices((el("voice-select") && el("voice-select").value) || "").catch(() => {});
   } catch (err) {
     setStatus(mode, "✗ " + (err && err.message ? err.message : "Network error"), "error");
     console.error(err);
@@ -512,9 +365,6 @@ document.addEventListener("DOMContentLoaded", () => {
       button.addEventListener("click", () => generate(mode));
     }
   });
-
-  const runtimeSelect = el("runtime-select");
-  if (runtimeSelect) runtimeSelect.addEventListener("change", () => switchRuntime());
 
   document.querySelectorAll(".helper-btn[data-insert]").forEach((button) => {
     button.addEventListener("click", () => {

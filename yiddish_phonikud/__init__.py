@@ -8,10 +8,6 @@ The default runtime (``DEFAULT_RUNTIME_ID``) is blue-yi: a Yiddish-trained
 flow-matching acoustic model at 44.1 kHz with four saved voices, whose
 character vocabulary covers the closed Yiddish inventory outright.
 
-``piper_yi`` is the lightweight 22.05 kHz fallback, and it is the one carrying
-the stronger caveat: a Hebrew-trained Piper checkpoint (espeak voice ``he``,
-single speaker) driven with Yiddish IPA, which additionally has to fold ʧ/ʤ to
-tʃ/dʒ because its ``phoneme_id_map`` lacks them. See ``registry.PIPER_YI``.
 
 Importing this package stays free of heavy dependencies: only the runtime
 catalog comes along. FastAPI, onnxruntime, numpy and the engine bindings live

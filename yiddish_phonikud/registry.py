@@ -9,8 +9,8 @@ catalog but not implemented in this build, so ``/v1/models/load`` answers with
 a clear build-specific error instead of pretending the runtime is present, the
 way MamboTTS declares its Qwen runtime ahead of the platforms that can run it —
 and ``RuntimeManifest.hf_repo_id``, for a bundle that is downloaded from Hugging
-Face at first use rather than committed to the Space. Both runtimes in this
-build are implemented; ``available`` exists for the next one that is not.
+Face at first use rather than committed to the Space. The one runtime in this
+build is implemented; ``available`` exists for the next one that is not.
 """
 
 from __future__ import annotations
@@ -85,50 +85,7 @@ class RuntimeManifest:
     hf_repo_id: str = ""
 
 
-# The Piper voice is committed in the Space repo itself, so its "download"
-# base URL is the Space's own resolve endpoint — useful to anyone rebuilding
-# the bundle outside the Space.
-PIPER_YI_BASE_URL = (
-    "https://huggingface.co/spaces/notmax123/phonikud-yi-blue-tts/resolve/main"
-)
 BLUE_MODEL_BASE_URL = "https://huggingface.co/notmax123/blue-yi/resolve/main"
-
-PIPER_YI_FILES: tuple[ModelFile, ...] = (
-    ModelFile(name="model.onnx", url=f"{PIPER_YI_BASE_URL}/model.onnx"),
-    ModelFile(name="model.config.json", url=f"{PIPER_YI_BASE_URL}/model.config.json"),
-)
-
-PIPER_YI_REQUIRED_FILES: tuple[str, ...] = ("model.onnx", "model.config.json")
-
-PIPER_YI = RuntimeManifest(
-    id="piper_yi",
-    name="Piper (Yiddish IPA)",
-    version="piper-yi-0.1",
-    size="~61 MB",
-    description=(
-        "Lightweight fallback: 61 MB and 22.05 kHz against blue-yi's 281 MB "
-        "and 44.1 kHz, and it loads in a fraction of the time. The acoustic model "
-        "itself is Hebrew-trained (espeak voice \"he\", single speaker) and has not "
-        "been retrained on Yiddish audio, so it renders Yiddish phonemes with a "
-        "Hebrew accent — mainly in the vowels and in the affricates that have to be "
-        "folded to two-character sequences. That caveat is unchanged; it is why "
-        "blue_yi, whose vocab covers the Yiddish inventory outright, is now the "
-        "default."
-    ),
-    # Committed at the repo root, beside app.py.
-    directory=".",
-    install_kind=InstallKind.FILES,
-    files=PIPER_YI_FILES,
-    required_files=PIPER_YI_REQUIRED_FILES,
-    capabilities=RuntimeCapabilities(
-        yiddish=True,
-        streaming=True,
-        # Single-speaker voice: nothing to clone from, and nothing to pick.
-        voice_reference=False,
-        fixed_voices=False,
-    ),
-    available=True,
-)
 
 # The file list from blue-yi's onnx/manifest.json plus the saved voices, which
 # sit at the repo root rather than under onnx/. duration_predictor.onnx and
@@ -219,9 +176,8 @@ BLUE_YI = RuntimeManifest(
     hf_repo_id=BLUE_REPO_ID,
 )
 
-# Blue comes first and is the default: it is the Yiddish-aware model. Piper
-# stays available behind it as the lightweight fallback.
-REGISTRY: tuple[RuntimeManifest, ...] = (BLUE_YI, PIPER_YI)
+# One runtime: blue-yi, the Yiddish-trained model.
+REGISTRY: tuple[RuntimeManifest, ...] = (BLUE_YI,)
 
 
 def runtimes() -> tuple[RuntimeManifest, ...]:

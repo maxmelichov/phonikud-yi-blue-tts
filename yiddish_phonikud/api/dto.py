@@ -150,8 +150,7 @@ class StateResponse(BaseModel):
         ...,
         description=(
             "Output sample rate in Hz of the loaded runtime (0 when unloaded). "
-            "Runtime-dependent: BlueTTS 2.5 is 44100, the legacy Piper voice "
-            "22050 — never hard-code it."
+            "blue-yi renders at 44100 — read it here rather than hard-coding it."
         ),
         examples=[44100],
     )
@@ -444,7 +443,7 @@ class PhonemeInventoryResponse(BaseModel):
             "Inventory units absent from the loaded runtime's phoneme "
             "vocabulary. Empty for BlueTTS 2.5, whose char vocab covers the "
             "whole closed inventory (`ʦ`, `ʧ`, `ʤ`, `ŋ`, `ˈ`, `ː` included); "
-            "for the legacy Piper voice it correctly lists `ʧ` and `ʤ`, which "
+            "a voice lacking a unit would list it here, which "
             "are folded to `tʃ`/`dʒ` before synthesis. Also empty when no "
             "runtime is loaded — this field says nothing then."
         ),
@@ -543,7 +542,7 @@ class SpeechBody(BaseModel):
             "~121 ms for 4 steps, ~178 ms for 8 and ~295 ms for 16 per 1.2 s of "
             "speech, doubled again whenever `cfg_scale` > 1. Capped at 32 so a "
             "single request cannot monopolise the box. Ignored by runtimes that "
-            "have no sampler (the Piper voice)."
+            "have no sampler."
         ),
         examples=[8],
     )
@@ -566,7 +565,7 @@ class SpeechBody(BaseModel):
         description=(
             "Seed for the sampler's initial noise, for reproducible output from "
             "a stochastic runtime. Omit for a fresh draw each call. Ignored by "
-            "deterministic runtimes (the Piper voice)."
+            "deterministic runtimes."
         ),
         examples=[1234],
     )

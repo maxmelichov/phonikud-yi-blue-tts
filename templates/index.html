@@ -24,63 +24,16 @@
       <header class="header">
         <h1><i class="fas fa-microphone-alt"></i> Yiddish Phonikud TTS</h1>
         <p class="header-subtitle">
-          Hasidic (Unterland&nbsp;/&nbsp;Central) Yiddish &mdash; pointing, grapheme-to-phoneme,
-          and speech, with the phoneme derivation shown for every word.
+          Hasidic (Unterland&nbsp;/&nbsp;Central) Yiddish &mdash; text to speech.
         </p>
       </header>
 
-      <!-- Caveat: above the fold, deliberately plain, and different per runtime.
-           Blue 2.5 declares Yiddish and covers the whole phone inventory, so the old
-           "Hebrew-trained acoustic model" line is false for it; it stays true for Piper. -->
-      <section class="notice notice-caveat" role="note" id="caveat-blue"
-               {% if runtime_state and runtime_state.runtime == "piper_yi" %}style="display: none"{% endif %}>
-        <i class="fas fa-circle-info notice-icon" aria-hidden="true"></i>
-        <div class="notice-body">
-          <strong>About the voice (blue-yi).</strong>
-          This checkpoint is <strong>trained for Yiddish</strong>, not a multilingual model
-          borrowed for it: its manifest declares <span class="mono">yi</span> alone, its latent
-          statistics come from <code class="mono">stats_yiddish.pt</code>, and it was trained on
-          IPA produced by this same phonikud-yi engine. Every unit of the closed inventory &mdash;
-          including <span class="mono">ʦ ʧ ʤ ɡ ŋ</span> and the marks <span class="mono">ˈ ː</span>
-          &mdash; is a single embedding in its vocabulary, so <strong>every phone reaches the model
-          unfolded and none is dropped</strong>. (A few punctuation characters the engine passes
-          through are outside the vocabulary and are removed silently; they carry no sound.)
-          Two honest caveats. The four saved voices are LibriTTS-R readers of English, so the
-          <em>speaker identity</em> carries a foreign colour even though the phonology is Yiddish;
-          any 44.1&nbsp;kHz recording can be used as a reference instead. And the duration
-          predictor emits one <em>total</em> length rather than per-phoneme durations, with no
-          monotonic alignment &mdash; when that total runs short the model compresses, and a word
-          can be swallowed. If a word goes missing, generate again or shorten the sentence.
-        </div>
-      </section>
-
-      <section class="notice notice-caveat" role="note" id="caveat-piper"
-               {% if not (runtime_state and runtime_state.runtime == "piper_yi") %}style="display: none"{% endif %}>
-        <i class="fas fa-circle-info notice-icon" aria-hidden="true"></i>
-        <div class="notice-body">
-          <strong>About the voice (Piper fallback).</strong>
-          <span class="mono">model.onnx</span> is a Hebrew-trained Piper checkpoint being driven with
-          Yiddish IPA: expect a Hebrew accent and no Yiddish prosody. It also has no
-          <span class="mono">ʧ</span> or <span class="mono">ʤ</span> in its vocabulary, so those are
-          folded to <span class="mono">tʃ</span> and <span class="mono">dʒ</span> and reported below.
-          It runs at 22.05&nbsp;kHz and is kept as the lightweight fallback.
-        </div>
-      </section>
-
       <main class="main-card">
-        <!-- Voice and runtime. Populated at load from GET /v1/models/sources,
-             GET /v1/models/state and GET /v1/voices, so it can never advertise a
-             voice or a sample rate the server does not actually have. -->
-        <section class="voice-panel" aria-label="Voice and runtime">
+        <!-- Voice and speed. The voice list is refreshed at load from
+             GET /v1/voices, so the page can never offer a voice the server does
+             not have. There is no runtime picker: this build ships one runtime. -->
+        <section class="voice-panel" aria-label="Voice and speed">
           <div class="control-grid">
-            <div class="control">
-              <label class="control-label" for="runtime-select">Runtime</label>
-              <select id="runtime-select" class="control-input">
-                {% for r in runtimes or [] %}
-                <option value="{{ r.id }}"{% if runtime_state and runtime_state.runtime == r.id %} selected{% endif %}{% if not r.available %} disabled{% endif %}>{{ r.name or r.id }}{% if not r.available %} &mdash; not in this build{% endif %}</option>
-                {% endfor %}
-              </select>
-            </div>
             <div class="control">
               <label class="control-label" for="voice-select">Voice</label>
               <select id="voice-select" class="control-input">
@@ -104,15 +57,8 @@
             </div>
           </div>
 
-          <p class="control-state" id="runtime-line" role="status">
-            {% if runtime_state and runtime_state.loaded %}
-            Loaded: <span class="mono">{{ runtime_state.runtime }}</span>{% if runtime_state.sample_rate %}
-            &middot; {{ runtime_state.sample_rate }}&nbsp;Hz{% endif %}
-            {% else %}No runtime loaded yet &mdash; the first generate loads the default.{% endif %}
-          </p>
-
           <details class="advanced">
-            <summary>Advanced &mdash; flow-matching controls</summary>
+            <summary>Advanced</summary>
             <div class="control-grid">
               <div class="control control-narrow">
                 <label class="control-label" for="steps-input">n_steps</label>
@@ -141,17 +87,6 @@
                 />
               </div>
             </div>
-            <p class="control-note">
-              These two are blue-yi controls; the Piper fallback ignores them.
-              <strong>n_steps</strong> (default 8) is how many flow-matching steps the vector
-              estimator runs &mdash; more steps sound better and take longer. Measured on this
-              machine for about 1.2&nbsp;s of audio: 4&nbsp;steps 121&nbsp;ms,
-              8&nbsp;steps 178&nbsp;ms, 16&nbsp;steps 295&nbsp;ms.
-              <strong>cfg_scale</strong> (default 4.0) is classifier-free guidance strength; the
-              guidance is applied with a second pass per step, so <span class="mono">1.0</span>
-              disables it and costs roughly half as much.
-            </p>
-            <p class="control-note" id="advanced-note"></p>
           </details>
         </section>
 
@@ -200,16 +135,10 @@
         </div>
 
         <div class="tab-content">
-          <!-- Text: unpointed Yiddish -> G2P -> voice (v5 pointing shown alongside, not fed forward) -->
+          <!-- Text: unpointed Yiddish -> G2P -> voice -->
           <div class="tab-pane fade show active" id="text-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-font"></i> Yiddish text</h2>
-              <p class="section-description">
-                Plain, unpointed Yiddish. The G2P derives the phonemes from <em>your</em> text
-                through the engine's authority chain (native gold verdicts &gt; corpus audio &gt;
-                published pointing &gt; model guesses). The v5 pointing model runs separately and its
-                nikud is shown for reading only &mdash; it is never fed back into the G2P.
-              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -234,10 +163,6 @@
           <div class="tab-pane fade" id="nikud-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-language"></i> Pointed Yiddish (nikud)</h2>
-              <p class="section-description">
-                Already-pointed Yiddish. The pointing model is skipped entirely and the text goes
-                straight to G2P &mdash; use this to correct the pointing by hand and hear the result.
-              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -284,7 +209,7 @@
               <i class="fas fa-triangle-exclamation notice-icon" aria-hidden="true"></i>
               <div class="notice-body">
                 This text has no nikud on it. Either point it here, or use the
-                <strong>Text</strong> tab and let the v5 model point it for you.
+                <strong>Text</strong> tab and let the model point it for you.
               </div>
             </div>
           </div>
@@ -293,13 +218,6 @@
           <div class="tab-pane fade" id="phonemes-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-code"></i> IPA phonemes</h2>
-              <p class="section-description">
-                Raw IPA, sent straight to the voice. Units outside the closed Yiddish inventory are
-                rejected outright &mdash; a bare <span class="mono">ː</span> included, since length
-                exists only inside the single unit <span class="mono">aː</span>. Units the loaded
-                voice's vocabulary lacks are folded and reported below;
-                blue-yi lacks none of them.
-              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -348,14 +266,7 @@
             <div class="notice-body">
               The audio does not match the IPA at
               <span id="unsupported-list" class="phone-chips"></span>
-              &mdash; those units are either outside the closed Yiddish inventory or missing from the
-              loaded voice's vocabulary, so they were folded to the nearest thing it can say, or
-              dropped. It should stay hidden on both runtimes for engine-produced Yiddish:
-              blue-yi covers the whole inventory, and the Piper fallback folds
-              <span class="mono">ʧ</span>/<span class="mono">ʤ</span> to
-              <span class="mono">tʃ</span>/<span class="mono">dʒ</span> successfully, which is a
-              substitution rather than a loss and is listed under the inventory above instead. What
-              does appear here is off-inventory IPA you typed yourself in the Phonemes tab.
+              &mdash; the voice cannot say those units, so they were folded or dropped.
             </div>
           </div>
 
@@ -369,10 +280,6 @@
               <i class="fas fa-table-list"></i> Diacritics and phonemes
               <span class="token-count" id="token-count"></span>
             </h2>
-            <p class="result-description">
-              One row per token as the engine produced it. Multiword lexicon entries come back as a
-              single row, so the row count need not match the word count.
-            </p>
             <div class="table-scroll">
               <table class="token-table" id="token-table">
                 <thead>
@@ -389,151 +296,13 @@
                 <tbody id="token-tbody"></tbody>
               </table>
             </div>
-            <div class="table-legend">
-              <p class="legend-row">
-                <span class="legend-item"><span class="badge-route route-lexicon">lexicon</span>
-                  the reading came from a table: the native-verified gold lexicon, the
-                  abbreviation or multiword table, or a legacy merged-loshn-koydesh /
-                  high-frequency list</span>
-                <span class="legend-item"><span class="badge-route route-rule">rule</span>
-                  no table knew the word, so the Germanic or loshn-koydesh rule path derived
-                  it</span>
-                <span class="legend-item"><span class="badge-route route-fallback">fallback</span>
-                  the engine judged its own output unfit to emit and quarantined it &mdash; a
-                  vowel-less loshn-koydesh skeleton, an unlexiconed unpointed LK word, or an
-                  out-of-inventory token such as a number or a URL. A quarantined token
-                  contributes only its punctuation to the spoken string; it is not read
-                  aloud</span>
-              </p>
-              <p class="legend-row">
-                <span class="legend-item"><span class="conf conf-high">HIGH</span> a lexicon hit</span>
-                <span class="legend-item"><span class="conf conf-med">MED</span> an unambiguous rule derivation</span>
-                <span class="legend-item"><span class="conf conf-low">LOW</span>
-                  the least certain readings: a defaulted ambiguous <span class="rtl-inline">א</span>
-                  or <span class="rtl-inline">פ</span>, a rescued loshn-koydesh form, a
-                  corpus-mined collocation, or an inventory violation. This is the
-                  human-verification queue, <strong>not an error</strong></span>
-              </p>
-              <p class="legend-row">
-                <span class="legend-item"><strong>Layer</strong>
-                  <span class="mono">G</span> Germanic &middot; <span class="mono">L</span>
-                  loshn-koydesh &middot; <span class="mono">E</span> loanword &middot;
-                  <span class="mono">N</span> proper name &middot; <span class="mono">A</span>
-                  abbreviation &middot; <span class="mono">X</span> unclassified</span>
-              </p>
-            </div>
           </div>
         </section>
       </main>
 
-      <!-- Runtime / build info -->
-      <details class="runtime-panel">
-        <summary>
-          <i class="fas fa-server"></i> Runtime and engine
-          <span class="runtime-summary">
-            {% if runtime_state and runtime_state.loaded %}
-            {{ runtime_state.runtime }}{% if runtime_state.sample_rate %} &middot; {{ runtime_state.sample_rate }}&nbsp;Hz{% endif %}
-            {% else %}not loaded yet{% endif %}
-          </span>
-        </summary>
-
-        <div class="runtime-grid">
-          <div class="runtime-card">
-            <h3>Yiddish engine</h3>
-            <dl>
-              <dt>Repo</dt>
-              <dd>
-                {% if engine and engine.repo %}
-                <a href="https://huggingface.co/{{ engine.repo }}" target="_blank" rel="noopener">{{ engine.repo }}</a>
-                {% else %}&mdash;{% endif %}
-              </dd>
-              <dt>Revision</dt>
-              <dd class="mono">{{ (engine.revision if engine and engine.revision else "") or "—" }}</dd>
-              <dt>Status</dt>
-              <dd>
-                {% if engine and engine.loaded %}
-                <span class="pill pill-ok">loaded</span>
-                {% else %}
-                <span class="pill pill-wait">warming up &mdash; the first generate waits for the download</span>
-                {% endif %}
-              </dd>
-              <dt>Gold lexicon</dt>
-              <dd>509 native-verified words</dd>
-              {% if engine and engine.tables %}
-              <dt>Tables</dt>
-              <dd class="mono small">
-                {% for name, n in engine.tables.items() %}{{ name }}={{ n }}{% if not loop.last %} · {% endif %}{% endfor %}
-              </dd>
-              {% endif %}
-            </dl>
-          </div>
-
-          <div class="runtime-card">
-            <h3>Voice runtime</h3>
-            <dl>
-              <dt>Loaded</dt>
-              <dd>{{ (runtime_state.runtime if runtime_state and runtime_state.runtime else "") or "—" }}</dd>
-              <dt>Model</dt>
-              <dd class="mono small">{{ (runtime_state.model if runtime_state and runtime_state.model else "") or "—" }}</dd>
-              <dt>Sample rate</dt>
-              <dd id="panel-sample-rate">{% if runtime_state and runtime_state.sample_rate %}{{ runtime_state.sample_rate }} Hz{% else %}&mdash;{% endif %}</dd>
-              <dt>Voices</dt>
-              <dd class="mono small" id="panel-voices">&mdash;</dd>
-            </dl>
-            <p class="small muted">
-              Two runtimes, two sample rates: blue-yi is the default at 44.1&nbsp;kHz with
-              four saved voices, and the Piper fallback is single-speaker at 22.05&nbsp;kHz. Switching
-              the runtime above loads it through <span class="mono">POST /v1/models/load</span>.
-            </p>
-            {% if runtimes %}
-            <table class="mini-table">
-              <thead>
-                <tr><th>Runtime</th><th>Version</th><th>Installed</th><th>Available</th></tr>
-              </thead>
-              <tbody>
-                {% for r in runtimes %}
-                <tr>
-                  <td>{{ r.name or r.id }}</td>
-                  <td class="mono small">{{ r.version }}</td>
-                  <td>{% if r.installed %}yes{% else %}no{% endif %}</td>
-                  <td>{% if r.available %}yes{% else %}<span class="muted">declared only</span>{% endif %}</td>
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-            {% endif %}
-          </div>
-
-          {% if inventory %}
-          <div class="runtime-card runtime-card-wide">
-            <h3>Phone inventory</h3>
-            <p class="small muted">
-              The closed set the G2P engine may emit. Nothing outside it is ever produced.
-            </p>
-            <dl>
-              <dt>Vowels</dt>
-              <dd class="phone-chips">{% for p in inventory.vowels %}<span class="chip mono">{{ p }}</span>{% endfor %}</dd>
-              <dt>Consonants</dt>
-              <dd class="phone-chips">{% for p in inventory.consonants %}<span class="chip mono">{{ p }}</span>{% endfor %}</dd>
-              <dt>Marks</dt>
-              <dd class="phone-chips">{% for p in inventory.marks %}<span class="chip mono">{{ p }}</span>{% endfor %}</dd>
-              {% if inventory.runtime_vocab_missing %}
-              <dt>Voice lacks</dt>
-              <dd class="phone-chips">{% for p in inventory.runtime_vocab_missing %}<span class="chip chip-warn mono">{{ p }}</span>{% endfor %}</dd>
-              {% endif %}
-            </dl>
-          </div>
-          {% endif %}
-        </div>
-      </details>
-
       <footer class="footer">
         <a href="/docs" target="_blank" rel="noopener"><i class="fas fa-book"></i> API docs</a>
-        <a href="/redoc" target="_blank" rel="noopener"><i class="fas fa-file-lines"></i> ReDoc</a>
         <a href="/health" target="_blank" rel="noopener"><i class="fas fa-heart-pulse"></i> Health</a>
-        {% if engine and engine.repo %}
-        <a href="https://huggingface.co/{{ engine.repo }}" target="_blank" rel="noopener"><i class="fas fa-cube"></i> Engine</a>
-        {% endif %}
         <span class="footer-version">Yiddish Phonikud TTS{% if version %} v{{ version }}{% endif %}</span>
       </footer>
     </div>

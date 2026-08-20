@@ -16,7 +16,6 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import JSONResponse
@@ -24,10 +23,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 
 from .. import __version__
-from .. import audio, engine, phones, registry
+from .. import audio
 # Off the submodule, never `from .. import runtimes`: the package also has a
 # registry function by that name, and which one you get depends on import order.
-from ..runtimes import RuntimeNotAvailable, loaded as loaded_runtime, state as runtime_state
+from ..runtimes import RuntimeNotAvailable, loaded as loaded_runtime
 # One pipeline and one synthesis path for both routers, so /generate and
 # /v1/audio/speech cannot phonemize, fold, drop or report differently.
 from .routes_v1 import (
@@ -54,24 +53,6 @@ router = APIRouter()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 templates = Jinja2Templates(directory=str(REPO_ROOT / "templates"))
 
-#: Stated verbatim in the UI, the OpenAPI description and the README. Say what
-#: is genuinely Yiddish here and what is not; never dress the voice up.
-VOICE_CAVEAT = (
-    "The G2P front end (nikud + phonemes) is genuine Hasidic Yiddish. The default "
-    "runtime, BlueTTS 2.5 (44.1 kHz, five fixed voices), declares Yiddish among "
-    "its training languages and its latent statistics were exported from "
-    "stats_yiddish.pt, so it is not a Hebrew model being driven with Yiddish "
-    "phonemes — and its character vocabulary covers the whole closed Yiddish "
-    "inventory (ʦ, ʧ, ʤ, ŋ, ˈ and the aː length mark all reach the model "
-    "unfolded), so segments follow the IPA closely. The real caveat is narrower: "
-    "all five bundled speakers are Hebrew or English readers, so expect a foreign "
-    "accent in vowel colour and rhythm — prosody and speaker identity come from "
-    "those voices, not from Yiddish speech. The legacy piper_yi runtime is the "
-    "stronger caveat: a Hebrew-trained Piper checkpoint driven with Yiddish IPA, "
-    "which additionally has to fold ʧ/ʤ to tʃ/dʒ. A voice trained on Yiddish "
-    "speech is future work."
-)
-
 #: Real Hasidic (Unterland/Central) Yiddish sentences, undotted as the G2P expects.
 SAMPLES: tuple[str, ...] = (
     "מיט א פאר יאר צוריק",
@@ -87,67 +68,6 @@ _FORMS: dict[str, InputForm] = {
     "nikud": InputForm.NIKUD,
     "phonemes": InputForm.PHONEMES,
 }
-
-
-def engine_info() -> dict[str, Any]:
-    """Engine metadata that is cheap to read.
-
-    `engine.info()` triggers the 1.23 GB snapshot download on a cold start, so the
-    index page must not call it before the background warmup has finished.
-    """
-    if engine.is_loaded():
-        return engine.info()
-    return {
-        "repo": registry.ENGINE_REPO_ID,
-        "revision": None,
-        "dir": None,
-        "tables": {},
-        "loaded": False,
-    }
-
-
-def catalog() -> list[dict[str, Any]]:
-    return [
-        {
-            "id": m.id,
-            "name": m.name,
-            "version": m.version,
-            "size": m.size,
-            "description": m.description,
-            "directory": m.directory,
-            "install_kind": m.install_kind.value,
-            "available": m.available,
-            "installed": registry.is_installed(m, REPO_ROOT),
-            "files": [{"name": f.name, "url": f.url} for f in m.files],
-            "capabilities": {
-                "yiddish": m.capabilities.yiddish,
-                "streaming": m.capabilities.streaming,
-                "voice_reference": m.capabilities.voice_reference,
-                "fixed_voices": m.capabilities.fixed_voices,
-            },
-        }
-        for m in registry.runtimes()
-    ]
-
-
-def inventory() -> dict[str, Any]:
-    """The closed inventory, plus what the resident voice cannot say — the
-    template renders `runtime_vocab_missing` as warning chips."""
-    rt = loaded_runtime()
-    missing: list[str] = []
-    if rt is not None:
-        vocab = rt.vocab()
-        missing = [
-            unit for unit in sorted(phones.INVENTORY)
-            if any(ch not in vocab for ch in unit)
-        ]
-    return {
-        "vowels": list(phones.VOWELS),
-        "consonants": list(phones.CONSONANTS),
-        "marks": list(phones.MARKS),
-        "all": sorted(phones.INVENTORY),
-        "runtime_vocab_missing": missing,
-    }
 
 
 def voice_names() -> list[str]:
@@ -167,31 +87,19 @@ async def index(request: Request):
     """Render templates/index.html.
 
     Template context keys (the template is written against exactly these):
-      engine        dict  - engine.info()-shaped: repo, revision, dir, tables, loaded
-      runtimes      list  - registry catalog rows: id, name, version, size,
-                            description, directory, install_kind, available,
-                            installed, files[{name,url}], capabilities{...}
-      runtime_state dict  - runtimes.state(): loaded, runtime, model, path, sample_rate
-      inventory     dict  - vowels, consonants, marks, all (the closed phone set)
-      voices        list  - voice names of the resident runtime, [] if none loaded
-      samples       list  - Yiddish example sentences for the text box
-      version       str   - yiddish_phonikud.__version__
+      voices   list - voice names of the resident runtime, [] if none loaded
+      samples  list - Yiddish example sentences for the text box
+      version  str  - yiddish_phonikud.__version__
 
-    The template renders one of TWO runtime-specific caveats (chosen from
-    `runtime_state.runtime`, kept in sync by static/script.js) rather than a
-    single string, because no one sentence is honest about both a 44.1 kHz
-    five-voice Blue and a 22.05 kHz Hebrew Piper. `VOICE_CAVEAT` is therefore
-    not in this context: it feeds the OpenAPI description, which is
-    runtime-blind by nature.
+    The page is a demo, not a datasheet: the catalog, the engine metadata and
+    the phone inventory are served by `/v1/models/sources`,
+    `/v1/models/state` and `/v1/phonemes/inventory` for callers that want them,
+    and are not rendered here.
     """
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "engine": engine_info(),
-            "runtimes": catalog(),
-            "runtime_state": runtime_state(),
-            "inventory": inventory(),
             "voices": voice_names(),
             "samples": list(SAMPLES),
             "version": __version__,
