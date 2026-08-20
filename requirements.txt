@@ -23,16 +23,14 @@ jinja2>=3.1               # routes_ui.py Jinja2Templates(templates/)
 pydantic>=2               # api/dto.py — every request/response model
 
 # --- engine + runtimes -----------------------------------------------------
-# snapshot_download: the ~1.23 GB engine and the ~282 MB BlueTTS 2.5 bundle.
+# snapshot_download: the ~1.23 GB engine and the ~282 MB blue-yi bundle.
 huggingface_hub>=0.25
-# Tensor plumbing for both runtimes, plus audio.pcm16_wav's vectorised packing.
+# Tensor plumbing for the runtime, plus audio.pcm16_wav's vectorised packing.
 numpy>=1.26
-# v5 pointing model, BlueTTS 2.5's four graphs, and the Piper voice.
+# The v5 pointing model and blue-yi's four graphs.
 onnxruntime>=1.18
-# The piper_yi fallback runtime; pulls espeakng-loader + phonemizer-fork.
-piper-onnx>=1.0.6
 
-# soundfile was dropped with the BlueTTS 2.5 change: no shipped module imports
+# soundfile was dropped with the blue-yi change: no shipped module imports
 # it. WAV bytes are written by audio.pcm16_wav (struct + numpy) and read back by
 # the stdlib `wave` module in scripts/selftest_space.py and scripts/e2e_check.sh;
 # BlueTTS returns float32 arrays and does no file I/O. The only mention left in

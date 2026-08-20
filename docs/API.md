@@ -3,8 +3,8 @@
 Hasidic (Unterland/Central) Yiddish text-to-speech. Hebrew-script Yiddish goes through the
 [`notmax123/phonikud-yi-engine`](https://huggingface.co/notmax123/phonikud-yi-engine) stack
 (G2P over a closed phone inventory, with a v5 pointing model for display), and the resulting
-IPA drives an acoustic runtime — by default
-[**blue-yi**](https://huggingface.co/notmax123/blue-yi) at 44.1 kHz.
+IPA drives the acoustic runtime,
+[**blue-yi**](https://huggingface.co/notmax123/blue-yi), at 44.1 kHz.
 
 > **What the voices are.** blue-yi declares Yiddish among its languages and its latent
 > statistics were exported from `stats_yiddish.pt`, and its character vocab covers the entire
@@ -13,14 +13,8 @@ IPA drives an acoustic runtime — by default
 > punctuation characters the engine passes through — `[ ] ׃ „ ‚ ‹ › | < > { }` — are outside the
 > character vocab and are removed on the way in; they carry no phonetic content and are not
 > reported.) The caveat is narrower than "wrong
-> language": all five bundled voices are Hebrew or English readers, so a foreign accent is
+> language": all four bundled voices are English readers, so a foreign accent is
 > likely, mostly in vowel colour and rhythm.
->
-> **The Piper fallback is different, and the stronger caveat still applies to it.**
-> `model.onnx` is a Hebrew Piper checkpoint (espeak voice `he`, single speaker,
-> `phoneme_type: raw`, 157 symbols, 22050 Hz) being *driven* with Yiddish IPA: Hebrew accent, no
-> Yiddish prosody, and no `ʧ`/`ʤ` in its vocabulary, so those two are folded (see
-> [Phone inventory](#phone-inventory)).
 >
 > **No accuracy figure is published anywhere in this API or its docs.** The source project
 > records that no measured word-error or accuracy number exists for this stack. Verified
@@ -103,8 +97,9 @@ The pipeline, in order:
    fails is a `400`, because there it can only be a caller error; an off-inventory unit in
    *engine* output is reported in `unsupported` and still spoken, because refusing would turn a
    G2P quirk into an outage.
-3. **fold** – rewrite units the loaded voice's vocabulary lacks (`ʧ`→`tʃ`, `ʤ`→`dʒ`, …). A
-   no-op on blue-yi, which lacks none of them. A **phone** that cannot be folded is dropped
+3. **fold** – rewrite units the loaded voice's vocabulary lacks. A no-op on blue-yi, whose
+   vocabulary lacks none of them, so nothing this build ships ever folds. A **phone** that
+   cannot be folded is dropped
    and reported in `unsupported` / `X-Dropped-Units`. Punctuation the vocabulary cannot spell is
    dropped silently and never reported: it is structure, not a phone, so nothing audible is lost.
 4. **chunk** – long text is split per sentence (200 characters, never inside a multiword lexicon
@@ -153,17 +148,17 @@ Practical consequences:
 
 ## Runtimes, voices and sample rates
 
-Two runtimes ship, and **they do not share a sample rate**. Read it from
-`GET /v1/models/state`; never hard-code it.
+One runtime ships. Its sample rate is still not something to hard-code — read it from
+`GET /v1/models/state`, which is also where a future second runtime would show up.
 
-| | `blue_yi` (default) | `piper_yi` (fallback) |
-| --- | --- | --- |
-| Model | blue-yi ONNX, flow-matching | Piper VITS ONNX |
-| Sample rate | **44100 Hz** | **22050 Hz** |
-| On disk | ~281 MB, fetched from `notmax123/blue-yi` | ~61 MB, committed beside `app.py` |
-| Voices | `Berl`, `Hershl`, `Rukhl`, `Sheyndl` | one, unnamed |
-| Yiddish phones | complete: nothing folded, nothing dropped | `ʧ`, `ʤ` folded to `tʃ`, `dʒ` |
-| Extra options | `n_steps` (8), `cfg_scale` (4.0), `seed` | none; these three are ignored |
+| | `blue_yi` (default, and the only one) |
+| --- | --- |
+| Model | blue-yi ONNX, flow-matching |
+| Sample rate | **44100 Hz** |
+| On disk | ~281 MB, fetched from `notmax123/blue-yi` |
+| Voices | `Berl`, `Hershl`, `Rukhl`, `Sheyndl` |
+| Yiddish phones | complete: nothing folded, nothing dropped |
+| Extra options | `n_steps` (8), `cfg_scale` (4.0), `seed` |
 
 `n_steps` is how many flow-matching steps the vector estimator runs — more steps sound
 marginally better and cost linearly more CPU. Measured on this hardware for about 1.2 s of
@@ -171,12 +166,13 @@ audio: **4 steps 121 ms, 8 steps 178 ms, 16 steps 295 ms**, plus a one-off ~1.5 
 build at warm-up. `cfg_scale` is classifier-free guidance strength; guidance needs a second
 model pass per step, so `cfg_scale: 1.0` skips it and roughly halves the cost.
 
-Switch runtime per process with `POST /v1/models/load`, or per request with
-`SpeechBody.runtime` (which loads it if it is not resident).
+`POST /v1/models/load` sets the runtime for the process and `SpeechBody.runtime` sets it for
+one request; with one runtime in the catalog both are only ever used to load `blue_yi`
+explicitly, and any other id is a `400 invalid_request`.
 
 ```bash
 curl -s -X POST http://localhost:7860/v1/models/load \
-  -H 'Content-Type: application/json' -d '{"runtime": "piper_yi"}'
+  -H 'Content-Type: application/json' -d '{"runtime": "blue_yi"}'
 ```
 
 ---
@@ -239,7 +235,7 @@ Response — `ModelSourcesResponse`:
 | `runtimes[].directory` | `string` | Directory the files live in under the model root (`"."` = repo root; for a Hub-hosted bundle it is only a hint for a manual install). |
 | `runtimes[].installed` | `bool` | Every required file is present here. |
 | `runtimes[].available` | `bool` | `false` = declared in the catalog but not implemented in this build; loading it returns 503 `not_available`. |
-| `runtimes[].capabilities` | `{yiddish, streaming, voice_reference, fixed_voices}` | All booleans. `voice_reference` is `false` for both runtimes: Blue's bundle ships frozen style vectors and no autoencoder encoder, so no sixth voice can be made from a recording. |
+| `runtimes[].capabilities` | `{yiddish, streaming, voice_reference, fixed_voices}` | All booleans. `voice_reference` is `false`: blue-yi's bundle ships frozen style vectors and no autoencoder encoder, so no fifth voice can be made from a recording. |
 | `engine_repo` | `string` | `notmax123/phonikud-yi-engine`. |
 | `default_paths[]` | `string` | Filesystem locations searched for model files. |
 
@@ -250,8 +246,9 @@ curl -s http://localhost:7860/v1/models/sources \
 
 ```json
 {"id":"blue_yi","size":"~281 MB","installed":true,"available":true,"fixed":true}
-{"id":"piper_yi","size":"~61 MB","installed":true,"available":true,"fixed":false}
 ```
+
+One object, because the catalog has one entry.
 
 ---
 
@@ -286,11 +283,10 @@ files missing), `500 internal_error` (the model failed to construct).
 What the process holds in memory right now. Safe before anything is loaded.
 
 Response — `StateResponse`: `loaded` (`bool`), `runtime`, `model`, `path` (`string`),
-`sample_rate` (`int`, `0` when unloaded — 44100 for `blue_yi`, 22050 for `piper_yi`).
+`sample_rate` (`int`, `0` when unloaded — 44100 for `blue_yi`).
 
-`path` is whatever the runtime loaded *from*, and the two runtimes differ in kind: `blue_yi`
-reports the snapshot **directory** holding its four graphs, `piper_yi` reports the `model.onnx`
-**file** itself. Do not assume an `.onnx` suffix.
+`path` is whatever the runtime loaded *from*: `blue_yi` reports the snapshot **directory**
+holding its four graphs, not a file. Do not assume an `.onnx` suffix.
 
 ```bash
 curl -s http://localhost:7860/v1/models/state
@@ -317,10 +313,9 @@ curl -s http://localhost:7860/v1/voices
 {"runtime":"blue_yi","voices":["Berl","Hershl","Rukhl","Sheyndl"]}
 ```
 
-The five names are Blue's saved styles; the demo UI's voice picker is populated from exactly
-this response. Returns 503 `no_model` when nothing is loaded yet — check `/health` to tell
-warming from broken. The Piper fallback is single-speaker, so on it the list is one entry and
-`voice` can be left empty.
+The four names are blue-yi's saved styles; the demo UI's voice picker is populated from
+exactly this response. Returns 503 `no_model` when nothing is loaded yet — check `/health` to
+tell warming from broken.
 
 ---
 
@@ -351,7 +346,7 @@ Response — `PhonemeInventoryResponse`:
 | `consonants[]` | `string` | Consonant units. |
 | `marks[]` | `string` | `["ˈ"]`. `ː` is **not** a unit: `aː` is one unit and a bare `ː` is a violation. |
 | `inventory[]` | `string` | Every unit, sorted — the full closed set. |
-| `runtime_vocab_missing[]` | `string` | Inventory units absent from the loaded voice's vocabulary: `[]` for `blue_yi`, `["ʤ","ʧ"]` for `piper_yi`, and `[]` when nothing is loaded (where it says nothing at all). |
+| `runtime_vocab_missing[]` | `string` | Inventory units absent from the loaded voice's vocabulary. **Always `[]` for the runtime this build ships**: blue-yi's vocab covers the whole inventory, so nothing is ever folded. It is also `[]` when nothing is loaded, where it says nothing at all — check `/v1/models/state` to tell the two apart. |
 
 ```bash
 curl -s http://localhost:7860/v1/phonemes/inventory | jq '{marks, runtime_vocab_missing}'
@@ -477,13 +472,12 @@ Request — `SpeechBody`:
 | `input_is_nikud` | `bool` | `false` | Declare `input` as pointed Yiddish: the pointing is read by the G2P and the v5 model is not run. Ignored when `input_is_phonemes` is set. |
 | `speed` | `float` | `1.0` | `0.5`–`2.0`. Above `1.0` is faster. |
 | `stream` | `bool` | `false` | Framed stream instead of one WAV body. |
-| `n_steps` | `int \| null` | `null` → 8 | Flow-matching steps, `1`–`32`. blue-yi only; ignored by Piper. |
-| `cfg_scale` | `float \| null` | `null` → 4.0 | Guidance strength, `1.0`–`8.0`; `1.0` disables guidance and halves the work. blue-yi only. |
-| `seed` | `int \| null` | `null` | Sampler noise seed, for reproducible output. Omit for a fresh draw. Ignored by the deterministic Piper voice. |
+| `n_steps` | `int \| null` | `null` → 8 | Flow-matching steps, `1`–`32`. |
+| `cfg_scale` | `float \| null` | `null` → 4.0 | Guidance strength, `1.0`–`8.0`; `1.0` disables guidance and halves the work. |
+| `seed` | `int \| null` | `null` | Sampler noise seed, for reproducible output. Omit for a fresh draw. |
 
 Non-streaming response: `200`, `Content-Type: audio/wav`, body = a complete mono 16-bit PCM WAV
-with a 44-byte header, **at the serving runtime's sample rate** — 44100 Hz on `blue_yi`,
-22050 Hz on `piper_yi`.
+with a 44-byte header, **at the serving runtime's sample rate** — 44100 Hz on `blue_yi`.
 
 Three response headers describe what actually happened, on both the single-body and the
 streaming response:
@@ -492,7 +486,7 @@ streaming response:
 | --- | --- | --- |
 | `X-Runtime` | `blue_yi` | The runtime that served the request. |
 | `X-Sample-Rate` | `44100` | Same rate as the WAV header — handy before parsing the body. |
-| `X-Dropped-Units` | (empty) | Inventory **phones** outside the closed set, or that the voice could not render even after folding: space-separated and **percent-encoded UTF-8** (header values are latin-1 and `ˈ`/`ʧ`/`ʤ` are not). Decode with one `urllib.parse.unquote`. Empty is the normal case on both runtimes — `ʧ`/`ʤ` fold cleanly to `tʃ`/`dʒ` on Piper and so never appear here; the field to read for "this voice lacks that phone" is `runtime_vocab_missing` from `GET /v1/phonemes/inventory`. Punctuation is never reported: it is structure, not a phone. |
+| `X-Dropped-Units` | (empty) | Inventory **phones** outside the closed set, or that the voice could not render even after folding: space-separated and **percent-encoded UTF-8** (header values are latin-1 and `ˈ`/`ʧ`/`ʤ` are not). Decode with one `urllib.parse.unquote`. Empty is the normal case: blue-yi can say every phone the engine emits. The field to read for "this voice lacks that phone" is `runtime_vocab_missing` from `GET /v1/phonemes/inventory`. Punctuation is never reported: it is structure, not a phone. |
 
 ```bash
 curl -sD - -o out.wav -X POST http://localhost:7860/v1/audio/speech \
@@ -544,15 +538,6 @@ curl -s -X POST http://localhost:7860/v1/audio/speech \
   -o out.wav
 ```
 
-The 22.05 kHz fallback, loaded for this request only:
-
-```bash
-curl -s -X POST http://localhost:7860/v1/audio/speech \
-  -H 'Content-Type: application/json' \
-  -d '{"input": "מיט א פאר יאר צוריק", "runtime": "piper_yi"}' \
-  -o out_22k.wav
-```
-
 Streaming (see the next section for how to decode it):
 
 ```bash
@@ -582,9 +567,9 @@ is documented here because `static/script.js` talks to it.
 
 #### `GET /`
 
-Renders `templates/index.html`. No parameters. The page reads `/v1/models/sources`,
-`/v1/models/state` and `/v1/voices` on load to populate its runtime and voice pickers, so it
-can never offer a voice or a sample rate the server does not have.
+Renders `templates/index.html`. No parameters. The page reads `/v1/models/state` and
+`/v1/voices` on load to populate its voice picker, so it can never offer a voice the server
+does not have. There is no runtime picker: this build ships one runtime.
 
 #### `POST /generate`
 
@@ -752,7 +737,7 @@ def speak(text: str, *, voice: str = "", save_to: str | None = None) -> None:
         resp.raw.decode_content = True
         for kind, payload in frames(resp.raw):
             if kind == KIND_CHUNK:
-                # The rate comes from the WAV header: 44100 on blue_yi, 22050 on piper_yi.
+                # The rate comes from the WAV header (44100 on blue_yi), not a constant.
                 samples, rate = sf.read(BytesIO(payload), dtype="float32")
                 sd.play(samples, rate)
                 sd.wait()                       # keeps chunks from overlapping
@@ -826,7 +811,7 @@ retype them: `"ɡ" == "g"` is `False`, and a mixed-up script-g turns every /ɡ/ 
 phone. Punctuation is not a phone and not a violation: the characters the engine splices around
 a token (`. , ! ? ; : ( ) [ ] … -` and friends) pass validation untouched.
 
-### What blue-yi covers, and what the Piper fallback folds
+### What blue-yi covers, and what folding would do
 
 blue-yi's `vocab.json` maps every unit of the inventory, `ʦ` (155), `ʧ` (184), `ʤ` (182),
 `ɡ` (66), `ŋ` (44), `ˈ` (120) and `ː` (122) included — the affricates are single ids there, not
@@ -835,32 +820,30 @@ worth knowing if you write IPA by hand: ASCII `'` (U+0027) is also in that vocab
 does not raise, it simply means *apostrophe* instead of *stress*; and ASCII `g` (154) is a
 different embedding from `ɡ` U+0261 (66).
 
-The Piper voice's `phoneme_id_map` has 157 symbols and covers `ʦ ʃ ʒ ɔ ə ɛ ɡ ŋ ˈ ː x ʊ` and every
-plain letter — **but not `ʧ` and not `ʤ`**. Those are its only two gaps, which is exactly what
-`runtime_vocab_missing` reports for it.
+Folding is therefore machinery no shipped runtime exercises. It is documented because it runs
+on every request and because `runtime_vocab_missing` and `unsupported` are defined in terms of
+it — a runtime with a narrower vocabulary would put it to work.
 
 Before synthesis, `phones.fold_to_vocab(ipa, runtime.vocab())` rewrites every unit the vocab
 lacks. A candidate is usable when **every character in it** is in the vocab — the vocab is keyed
 by single characters, so `tʃ` is not an entry, it is the entries `t` and `ʃ` used back to back.
 Candidates are tried in order and the first usable one wins:
 
-| Unit | Candidates | Result on `piper_yi` | Result on `blue_yi` |
-| --- | --- | --- | --- |
-| `ʧ` | `tʃ` | folded — `ʧalnt` → `tʃalnt`, `mɛnʧ` → `mɛntʃ` | untouched |
-| `ʤ` | `dʒ` | folded — `ʤab` → `dʒab` | untouched |
-| `ʦ` | `ts` | untouched (this voice has `ʦ`) | untouched |
-| `ɡ` | `g` | untouched | untouched |
-| `aː` | `aː`, `a` | untouched | untouched |
-| `oʊ` | `oʊ`, `o` | untouched | untouched |
-| `ə` | `ə`, `e` | untouched | untouched |
-| `ŋ` | `ŋ`, `n` | untouched | untouched |
-| `x` | `x`, `χ`, `k` | untouched | untouched |
+| Unit | Candidates | Result on `blue_yi` |
+| --- | --- | --- |
+| `ʧ` | `ʧ`, `tʃ` | untouched |
+| `ʤ` | `ʤ`, `dʒ` | untouched |
+| `ʦ` | `ʦ`, `ts` | untouched |
+| `ɡ` | `ɡ`, `g` | untouched |
+| `aː` | `aː`, `a` | untouched |
+| `oʊ` | `oʊ`, `o` | untouched |
+| `ə` | `ə`, `e` | untouched |
+| `ŋ` | `ŋ`, `n` | untouched |
+| `x` | `x`, `χ`, `k` | untouched |
 
-Folding `ʧ`→`tʃ` and `ʤ`→`dʒ` spells the same affricate out as stop + fricative. It is a real
-change to the output — the Piper model was never trained on a Yiddish `ʧ`, so the result is a
-Hebrew-accented approximation — but it is the honest degradation: without it, every word with a
-tsh or dzh would simply **lose a consonant**. On the default runtime the question does not
-arise.
+A fold would spell an affricate out as stop + fricative — a real change to the output, but the
+honest degradation, since without it a word with a tsh or dzh would simply **lose a consonant**.
+On this runtime the question does not arise.
 
 A unit with no usable candidate is dropped from the string and **always reported**: it appears
 in `unsupported` on `/generate` and `/v1/audio/phonemize`, and the runtime returns it to the

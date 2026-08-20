@@ -40,6 +40,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# Imported at module level, unlike every other package import in this file: the
+# registry is the source of truth for which bundle is pinned, and constants
+# below derive their paths from it. It is safe here because registry.py pulls in
+# nothing beyond the standard library -- no onnxruntime, no numpy -- so it
+# cannot turn a missing optional dependency into an import-time crash.
+from yiddish_phonikud import registry  # noqa: E402
+
 # Third-party packages whose absence is a missing dependency (skip), not a bug
 # (fail). A missing yiddish_phonikud.* module is always a bug.
 OPTIONAL_DEPS = frozenset(
@@ -82,11 +89,14 @@ CANARY_IPA = "mit a pˈur jur ʦirˈik"
 # male, 208.0-216.2 for the 211 Hz female, 170.3-195.6 for the 180 Hz female).
 # A 30 % band absorbs that honest utterance-to-utterance spread — this Space
 # Figures are blue-yi's own model card, which documents lower pitches than the
-# BlueTTS 2.5 bundle did for the same LibriTTS-R speakers (the styles were
-# re-encoded for this checkpoint, so they are not the same vectors).
-# The band stays wide because this Space
-# sit 10-16 % above the card — while still rejecting the 231 Hz tonal drone the
-# wrong latent fold produced on the 128 Hz male voice (band top 166 Hz).
+# BlueTTS 2.5 bundle did for the same LibriTTS-R speakers -- the styles were
+# re-encoded for this checkpoint, so they are not the same vectors.
+#
+# The band is deliberately wide (±30 %): this Space renders at speed 1.0 rather
+# than the reference's 1.2, and measured F0 sits ~10-16 % above the card. It is
+# still tight enough to catch what it exists to catch -- a wrong 144->24 latent
+# fold produced a 231 Hz tonal drone on the 115 Hz male voice, far outside the
+# band, while every wrong fold still yields audio of exactly the right length.
 BLUE_VOICE_F0_HZ: dict[str, float] = {
     "Berl": 115.0,          # libri_male_6209
     "Hershl": 110.0,        # libri_male_8088
@@ -108,13 +118,15 @@ BLUE_VOICES: tuple[str, ...] = (
 )
 # Env var the Blue adapter reads to use an already-downloaded bundle.
 BLUE_DIR_ENV = "BLUE25_MODEL_DIR"
-# The local HF cache snapshot of notmax123/BlueTTS2.5-onnx.
+# The local HF cache snapshot of the bundle the registry pins, used only when
+# BLUE25_MODEL_DIR is unset. Derived from the registry rather than written out:
+# it used to name BlueTTS2.5-onnx and its revision by hand, and when the default
+# runtime moved to blue-yi this kept pointing at the superseded bundle. A stale
+# path here does not fail — it silently tests the wrong weights, or falls
+# through to a cold-cache download.
 BLUE_LOCAL_SNAPSHOT = Path(
-    os.path.expanduser(
-        "~/.cache/huggingface/hub/models--notmax123--BlueTTS2.5-onnx/snapshots/"
-        "468da64b4a51795a7594a3637727dbaf876b6df2"
-    )
-)
+    os.path.expanduser("~/.cache/huggingface/hub")
+) / f"models--{registry.BLUE_REPO_ID.replace('/', '--')}" / "snapshots" / registry.BLUE_REVISION
 
 fails: list[str] = []
 skips: list[str] = []
@@ -200,11 +212,11 @@ else:
 
 if os.environ.get(BLUE_DIR_ENV):
     blue_source = f"{BLUE_DIR_ENV}={os.environ[BLUE_DIR_ENV]}"
-elif (BLUE_LOCAL_SNAPSHOT / "vocab.json").is_file():
+elif (BLUE_LOCAL_SNAPSHOT / "onnx" / "vocab.json").is_file():
     os.environ[BLUE_DIR_ENV] = str(BLUE_LOCAL_SNAPSHOT)
     blue_source = f"local snapshot {BLUE_LOCAL_SNAPSHOT}"
 else:
-    blue_source = "huggingface_hub snapshot_download (cold cache: ~280 MB)"
+    blue_source = "huggingface_hub snapshot_download (cold cache: ~281 MB)"
 
 BLUE_DIR = Path(os.environ.get(BLUE_DIR_ENV, ""))
 
@@ -231,7 +243,7 @@ try:
 
     blue = registry.runtime("blue_yi")
     check(blue is not None and blue.available, "blue_yi available in this build")
-    check(registry.runtime("piper_yi") is None, "no piper_yi manifest survives")
+    check(registry.runtime("nope") is None, "an unknown id resolves to no manifest")
     if blue is not None:
         caps = blue.capabilities
         check(
@@ -878,7 +890,7 @@ try:
         "no session rebuild per request",
     )
     try:
-        runtimes.instance("piper_yi")
+        runtimes.instance("no_such_runtime")
         raised = "no exception"
     except runtimes.RuntimeNotAvailable as exc:
         raised = type(exc).__name__

@@ -7,8 +7,8 @@ RUN useradd -m -u 1000 user
 WORKDIR /app
 
 # No apt layer: git is gone because nothing is installed from a git URL any
-# more (the Hebrew phonikud/style-onnx git deps were dropped), and piper-onnx
-# vendors its own espeak-ng data through espeakng-loader.
+# more (the Hebrew phonikud/style-onnx git deps were dropped), and every
+# remaining dependency ships wheels.
 
 # Install into the system interpreter — a venv buys nothing in a container.
 ENV UV_SYSTEM_PYTHON=1
