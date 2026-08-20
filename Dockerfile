@@ -27,7 +27,7 @@ COPY . .
 # --- the Hugging Face cache ------------------------------------------------
 # This container downloads TWO repos at runtime, ~1.5 GB together:
 #   notmax123/phonikud-yi-engine   1.23 GB  (v5 pointing model + G2P tables)
-#   notmax123/BlueTTS2.5-onnx      282 MB   (the default acoustic runtime)
+#   notmax123/blue-yi              281 MB   (the default acoustic runtime)
 #
 # The single most common HF Spaces Docker failure: huggingface_hub defaults its
 # cache to $HOME/.cache/huggingface, $HOME defaults to /root for a root-built
@@ -77,7 +77,7 @@ USER user
 ARG PREWARM_MODELS=0
 RUN if [ "$PREWARM_MODELS" = "1" ]; then \
       python -c "from huggingface_hub import snapshot_download as d; \
-d('notmax123/phonikud-yi-engine'); d('notmax123/BlueTTS2.5-onnx')"; \
+d('notmax123/phonikud-yi-engine'); d('notmax123/blue-yi')"; \
     fi
 
 EXPOSE 7860

@@ -50,7 +50,7 @@ _FULL_SCALE: Final = 32767.0
 
 #: Character budget for one synthesis chunk, and the default for `chunk_text`.
 #:
-#: Derived from the acoustic model, not chosen for taste. BlueTTS 2.5 refuses
+#: Derived from the acoustic model, not chosen for taste. blue-yi refuses
 #: text longer than `blue_yi.MAX_TEXT_TOKENS` (240) tokens — the point past
 #: which its duration predictor stops lengthening the utterance and starts
 #: cramming — and its encoder adds three tokens to the character count (a

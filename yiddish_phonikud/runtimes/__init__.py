@@ -5,7 +5,7 @@ acoustic back end implements, plus a loader that turns a registry manifest
 into a live instance. A runtime declared in the catalog but not implemented
 in this build fails loudly the way `RuntimeParams::QwenHe` does when the
 `qwen` feature is off -- it never pretends to be present. Both catalog
-runtimes are implemented here: blue_yi (default, BlueTTS 2.5 from the
+runtimes are implemented here: blue_yi (default, blue-yi from the
 Hugging Face hub) and piper_yi (the committed lightweight fallback).
 """
 

@@ -1,8 +1,8 @@
-"""BlueTTS 2.5 adapter: Yiddish IPA in, 44.1 kHz float32 out.
+"""blue-yi adapter: Yiddish IPA in, 44.1 kHz float32 out.
 
 Pure numpy + onnxruntime port of the reference gradio app's ``BlueTTS`` class
 (notmax123/BlueV3 ``app.py``, lines ~930-1400), adapted to the
-``notmax123/BlueTTS2.5-onnx`` bundle. No torch, no bluecodec, no librosa.
+``notmax123/blue-yi`` bundle. No torch, no bluecodec, no librosa.
 
 Why this bundle is the right acoustic model for Yiddish, and where it is not:
 
@@ -17,7 +17,7 @@ Why this bundle is the right acoustic model for Yiddish, and where it is not:
 * The autoencoder *encoder* was never exported, so ``duration_predictor.onnx``
   (wants ``z_ref``) and ``reference_encoder.onnx`` are unusable here and this
   runtime never opens them. Voice cloning from a wav is impossible from this
-  bundle; the five saved styles are all there is.
+  bundle; the four saved styles are all there is.
 
 Scope: this class synthesizes **exactly one utterance per call**, and it
 refuses text longer than ``MAX_TEXT_TOKENS`` with ``UtteranceTooLongError``.
@@ -85,10 +85,10 @@ DEFAULT_PACE_BLEND = 0.5
 # ships 1.2, which measured 0.975 s for a 20-phoneme Yiddish utterance against
 # 1.46 s at 1.0. 1.0 is the natural rate for Yiddish here.
 DEFAULT_N_STEPS = 8
-DEFAULT_CFG_SCALE = 4.0
+DEFAULT_CFG_SCALE = 3.0
 DEFAULT_SPEED = 1.0
 
-# The male LibriTTS reader: of the five bundled styles it is the one whose
+# The male LibriTTS reader: of the four bundled styles it is the one whose
 # synthesized F0 tracked the published per-voice figure most closely
 # (128 Hz documented, 123-131 Hz measured over three utterances) and it is the
 # reference CLI's own default.
@@ -115,7 +115,7 @@ WITHHELD_VOICES: frozenset[str] = frozenset({"female"})
 DEFAULT_VOICE = "Berl"
 
 # app.py:1845 rejects any voice JSON whose style_ttl std exceeds this as
-# incompatible with the checkpoint. All five 2.5 voices measure 0.055-0.064.
+# incompatible with the checkpoint. All four blue-yi voices measure 0.058-0.062.
 _STYLE_TTL_STD_LIMIT = 0.3
 
 # The one honest place to refuse a too-long request: the LENGTH OF THE TEXT,
@@ -167,7 +167,7 @@ _ONNX_FILES = (
 _LANG_TAG_RE = re.compile(r"</?[^>]+>")
 _ENDS_IN_PUNCT_RE = re.compile(r"[.!?;:,'\"')\]}…]$")
 
-# Peak limiting, not RMS normalisation: the five voices differ by ~6 dB in
+# Peak limiting, not RMS normalisation: the four voices differ by ~4 dB in
 # natural loudness and that difference is speaker identity, not an error.
 # Output legitimately exceeds +-1.0 inside speech (1.32 measured at the default
 # cfg_scale=4.0, 1.41 at cfg 6.0) and every PCM16 writer clips that silently.
@@ -277,11 +277,11 @@ def soft_limit(
 
 
 def model_dir() -> Path:
-    """Where the BlueTTS 2.5 bundle lives, downloading it on first use.
+    """Where the blue-yi bundle lives, downloading it on first use.
 
     ``BLUE25_MODEL_DIR`` points at an already-unpacked snapshot and suppresses
-    the download entirely. Otherwise ~282 MB is fetched from
-    ``notmax123/BlueTTS2.5-onnx``. ``HF_HOME`` and ``HF_TOKEN`` are honoured
+    the download entirely. Otherwise ~281 MB is fetched from
+    ``notmax123/blue-yi``. ``HF_HOME`` and ``HF_TOKEN`` are honoured
     from the environment, the token explicitly so a private revision keeps
     working.
     """
@@ -291,14 +291,14 @@ def model_dir() -> Path:
         if not (path / "tts.json").is_file():
             raise FileNotFoundError(
                 f"{BLUE_MODEL_DIR_ENV}={override} does not contain tts.json; "
-                "point it at an unpacked BlueTTS2.5-onnx snapshot, or unset it "
+                "point it at an unpacked blue-yi snapshot, or unset it "
                 f"to download {BLUE_REPO_ID} from Hugging Face."
             )
         return path
 
     from huggingface_hub import snapshot_download  # imported late: network dependency
 
-    log.info("downloading %s@%s (~282 MB on a cold cache)", BLUE_REPO_ID, BLUE_REVISION)
+    log.info("downloading %s@%s (~281 MB on a cold cache)", BLUE_REPO_ID, BLUE_REVISION)
     return Path(
         snapshot_download(
             repo_id=BLUE_REPO_ID,
@@ -329,7 +329,7 @@ def _style_tensor(payload: dict, key: str) -> np.ndarray:
 
 
 class BlueYiddish:
-    """Runtime implementation over the BlueTTS 2.5 ONNX bundle.
+    """Runtime implementation over the blue-yi ONNX bundle.
 
     Cheap metadata (tts.json, vocab.json, stats.npz, uncond.npz, the voice
     directory listing) is read in the constructor; the four ONNX sessions cost
@@ -347,8 +347,17 @@ class BlueYiddish:
         self.id = runtime_id
         self.model_name = model_name
         self.model_path = Path(directory) if directory is not None else model_dir()
+        # blue-yi keeps its graphs in onnx/ and its voice styles at the repo
+        # root; the older 2.5 bundle had both at the top level. Detect rather
+        # than assume, so an override pointed at either layout still loads.
+        self._graph_dir = (
+            self.model_path / "onnx"
+            if (self.model_path / "onnx" / "tts.json").is_file()
+            else self.model_path
+        )
+        self._blue_yi_convention = self._graph_dir != self.model_path
 
-        cfg = json.loads((self.model_path / "tts.json").read_text(encoding="utf-8"))
+        cfg = json.loads((self._graph_dir / "tts.json").read_text(encoding="utf-8"))
         self.sample_rate = int(cfg["ae"]["sample_rate"])                    # 44100
         self._base_chunk_size = int(cfg["ae"]["base_chunk_size"])           # 512
         self._compress_factor = int(cfg["ttl"]["chunk_compress_factor"])    # 6
@@ -358,13 +367,15 @@ class BlueYiddish:
         # The compressed channel count the flow operates on.
         self._compressed_dim = self._latent_dim * self._compress_factor     # 144
 
-        vocab = json.loads((self.model_path / "vocab.json").read_text(encoding="utf-8"))
+        vocab = json.loads((self._graph_dir / "vocab.json").read_text(encoding="utf-8"))
         self._pad_id = int(vocab.get("pad_id", 0))
+        self._bos_id = int(vocab.get("bos_id", 1))
+        self._eos_id = int(vocab.get("eos_id", 2))
         self._char_to_id: dict[str, int] = {
             str(k): int(v) for k, v in vocab["char_to_id"].items()
         }
 
-        stats = np.load(self.model_path / "stats.npz")
+        stats = np.load(self._graph_dir / "stats.npz")
         self._mean = np.asarray(stats["mean"], dtype=np.float32).reshape(1, -1, 1)
         self._std = np.asarray(stats["std"], dtype=np.float32).reshape(1, -1, 1)
         # npz wins over tts.json's ttl.normalizer.scale (app.py:795); they agree
@@ -376,7 +387,7 @@ class BlueYiddish:
         if self._normalizer_scale == 0.0:
             raise ValueError(f"stats.npz normalizer_scale is 0 in {self.model_path}")
 
-        uncond = np.load(self.model_path / "uncond.npz")
+        uncond = np.load(self._graph_dir / "uncond.npz")
         self._u_text = np.asarray(uncond["u_text"], dtype=np.float32)  # [1,256,1]
         self._u_ref = np.asarray(uncond["u_ref"], dtype=np.float32)    # [1,50,256]
         # u_text carries a single text position, so its mask is [1,1,1].
@@ -386,10 +397,10 @@ class BlueYiddish:
         # lazy session build discover a missing file on the first request. The
         # loader turns FileNotFoundError into RuntimeNotAvailable(MISSING_FILES),
         # i.e. a 503 `not_available` at load time and a red `/health`; without
-        # this an interrupted 282 MB snapshot_download left `/health` saying
+        # this an interrupted 281 MB snapshot_download left `/health` saying
         # "ready" and every synthesis returning 500.
         for filename in _ONNX_FILES:
-            if not (self.model_path / filename).is_file():
+            if not (self._graph_dir / filename).is_file():
                 raise FileNotFoundError(
                     f"{filename} is missing from {self.model_path}; the "
                     f"{BLUE_REPO_ID} snapshot is incomplete"
@@ -428,7 +439,7 @@ class BlueYiddish:
 
         Incompatible styles are excluded, not merely deprioritised: app.py:1845
         skips any voice whose ``style_ttl.std()`` exceeds 0.3 because such a
-        style belongs to a different checkpoint and renders as noise. All five
+        style belongs to a different checkpoint and renders as noise. All four
         bundled 2.5 voices pass (0.055-0.064).
         """
         if self._voices is None:
@@ -524,7 +535,7 @@ class BlueYiddish:
         xt = self._flow(xt, text_emb, style, latent_mask, text_mask, n_steps, cfg_scale)
         vf_elapsed = time.perf_counter() - vf_started
 
-        wav = self._decode(xt)
+        wav = self._decode(xt, duration)
         elapsed = time.perf_counter() - started
         log.debug(
             "blue_yi voice=%s T_text=%d T_lat=%d dur=%.3fs steps=%d cfg=%.2f "
@@ -557,9 +568,9 @@ class BlueYiddish:
             started = time.perf_counter()
             built = {}
             for filename in _ONNX_FILES:
-                path = self.model_path / filename
+                path = self._graph_dir / filename
                 if not path.is_file():
-                    raise FileNotFoundError(f"{filename} is missing from {self.model_path}")
+                    raise FileNotFoundError(f"{filename} is missing from {self._graph_dir}")
                 built[filename] = ort.InferenceSession(
                     str(path), sess_options=opts, providers=["CPUExecutionProvider"]
                 )
@@ -676,9 +687,16 @@ class BlueYiddish:
         text = re.sub(r"\s+", " ", text).strip()
         if not text:
             raise ValueError("nothing to synthesize: the IPA string is empty")
-        if not _ENDS_IN_PUNCT_RE.search(text):
-            text += "."
-        prepared = _LANG_TAG_RE.sub(" ", f"<yi>{text}</yi>")
+        if self._blue_yi_convention:
+            # blue-yi's exporter wraps the ids in BOS/EOS and does nothing else
+            # (onnx/example_onnx.py). The 2.5 preprocessing below — appended
+            # full stop, <yi> tag padding — belongs to the older bundle; doing
+            # both would add four tokens this checkpoint never saw in training.
+            prepared = text
+        else:
+            if not _ENDS_IN_PUNCT_RE.search(text):
+                text += "."
+            prepared = _LANG_TAG_RE.sub(" ", f"<yi>{text}</yi>")
 
         ids: list[int] = []
         dropped: list[str] = []
@@ -703,6 +721,8 @@ class BlueYiddish:
                 dropped.append(ch)
         if not ids:
             raise ValueError("nothing to synthesize: no character had an embedding")
+        if self._blue_yi_convention:
+            ids = [self._bos_id, *ids, self._eos_id]
         text_ids = np.array([ids], dtype=np.int64)
         # Batch 1, so every position is real: the mask is all ones (app.py:765).
         text_mask = np.ones((1, 1, text_ids.shape[1]), dtype=np.float32)
@@ -725,7 +745,10 @@ class BlueYiddish:
         )
         seconds = np.asarray(predicted, dtype=np.float64).reshape(-1)
 
-        blend = min(max(float(pace_blend), 0.0), 1.0)
+        # blue-yi's duration graph is used raw: its exporter applies no pace
+        # blend, and the 0.0625 s/token reference the 2.5 app blended toward was
+        # measured against a different checkpoint's predictor.
+        blend = 0.0 if self._blue_yi_convention else min(max(float(pace_blend), 0.0), 1.0)
         if blend > 0.0:
             # app.py:500 — pull seconds-per-token toward a stable reference.
             tokens = np.maximum(
@@ -753,6 +776,26 @@ class BlueYiddish:
         # multiplying by it is a no-op kept for shape parity with the reference.
         latent_mask = np.ones((1, 1, t_lat), dtype=np.float32)
         return xt * latent_mask, latent_mask
+
+    def _uncond_text(self, text_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """The unconditional text branch, shaped for the loaded bundle.
+
+        u_text holds ONE text position. 2.5 feeds it as-is with a [1,1,1] mask.
+        blue-yi's exporter instead right-pads it to T_text and passes a mask that
+        is 1 only at position 0 (onnx/example_onnx.py) — the padding is masked
+        out, so the two are mathematically the same branch, but the graph reads
+        the text length from the tensor and mismatched lengths fail the shape
+        check rather than degrading quietly.
+        """
+        if not self._blue_yi_convention:
+            return self._u_text, self._u_text_mask
+        t_text = int(text_mask.shape[-1])
+        u_text = self._u_text
+        if u_text.shape[-1] != t_text:
+            u_text = np.pad(u_text, ((0, 0), (0, 0), (0, t_text - u_text.shape[-1])))
+        u_mask = np.zeros((1, 1, t_text), dtype=np.float32)
+        u_mask[:, :, 0] = 1.0
+        return u_text.astype(np.float32), u_mask
 
     # ------------------------------------------------------------------
     # Flow matching
@@ -805,14 +848,15 @@ class BlueYiddish:
             if not external_cfg:
                 xt = out_cond
                 continue
+            u_text, u_mask = self._uncond_text(text_mask)
             out_uncond, *_ = self._vf.run(
                 None,
                 {
                     "noisy_latent": xt,  # the same xt as the cond pass, on purpose
-                    "text_emb": self._u_text,
+                    "text_emb": u_text,
                     "style_ttl": self._u_ref,
                     "latent_mask": latent_mask,
-                    "text_mask": self._u_text_mask,
+                    "text_mask": u_mask,
                     "current_step": current_step,
                     "total_step": total_step,
                 },
@@ -823,7 +867,7 @@ class BlueYiddish:
     # ------------------------------------------------------------------
     # Latent -> waveform
     # ------------------------------------------------------------------
-    def _decode(self, xt: np.ndarray) -> np.ndarray:
+    def _decode(self, xt: np.ndarray, duration: np.ndarray | None = None) -> np.ndarray:
         # Denormalize BEFORE the fold. Skipping this still yields speech-like
         # audio with roughly the right F0 but the wrong spectral balance and an
         # inflated level — the failure most likely to ship unnoticed. For this
@@ -847,12 +891,23 @@ class BlueYiddish:
         wav, *_ = self._vocoder.run(None, {self._vocoder_input: z.astype(np.float32)})
         wav = np.asarray(wav, dtype=np.float32)
 
-        # Mandatory edge trim (app.py:1094). The final latent frame is often a
-        # click ~25 dB above speech (per-frame peak 9.37 vs a 0.14 body RMS in
-        # one measured case) and the leading frame is near-silent. Trim BEFORE
-        # measuring level: peak-limiting first would attenuate the whole
-        # utterance by ~20 dB.
-        if wav.shape[-1] > 2 * self._frame_len:
+        # Trim BEFORE measuring level: the final latent frame is often a click
+        # far above speech, and peak-limiting first would attenuate the whole
+        # utterance to compensate for it.
+        if self._blue_yi_convention and duration is not None:
+            # Cut to the predicted duration less one whole latent frame. The
+            # reference cuts only 20 ms, which is not enough: measured on this
+            # checkpoint, libri_male_6209 renders with its last tenth at 0.63 RMS
+            # against a 0.14 body and a peak of 8.11 at 99.8% through, while the
+            # other three voices sit under 0.87. Removing the frame brings it to
+            # 0.746 and leaves the others unchanged to within 0.002 RMS.
+            seconds = float(np.asarray(duration, dtype=np.float64).reshape(-1)[0])
+            keep = int(seconds * self.sample_rate) - self._frame_len
+            if 0 < keep < wav.shape[-1]:
+                wav = wav[..., :keep]
+        elif wav.shape[-1] > 2 * self._frame_len:
+            # 2.5 bundles: symmetric one-frame trim (app.py:1094); the leading
+            # frame is near-silent there and the trailing one is the click.
             wav = wav[..., self._frame_len:-self._frame_len]
         wav = wav.reshape(-1)
 

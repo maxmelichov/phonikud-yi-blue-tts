@@ -27,10 +27,10 @@ DEFAULT_RUNTIME_ID = "blue_yi"
 ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
 ENGINE_REVISION = "main"
 
-# The BlueTTS 2.5 acoustic bundle. Like the engine it is fetched with
+# The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries
 # ``hf_repo_id`` and its files never live under the repo root.
-BLUE_REPO_ID = "notmax123/BlueTTS2.5-onnx"
+BLUE_REPO_ID = "notmax123/blue-yi"
 # PINNED to a commit, not "main". stats.npz and vocab.json are welded to this
 # export (RECIPE G7/G14): the 144->24 fold, the 0.25 normalizer scale, the
 # per-voice style shapes and every character id were verified against these
@@ -38,7 +38,7 @@ BLUE_REPO_ID = "notmax123/BlueTTS2.5-onnx"
 # time and run verified code against unverified graphs — silently, because a
 # wrong-but-plausible latent still decodes to audio-shaped float32. Bump this
 # deliberately, and re-run scripts/selftest_space.py's F0 block when you do.
-BLUE_REVISION = "468da64b4a51795a7594a3637727dbaf876b6df2"
+BLUE_REVISION = "34ee8856b85043b68cfbcaf0b3acad4c20326f88"
 # Local-override env var for that bundle, the counterpart of
 # engine.ENGINE_DIR_ENV. It lives here rather than in runtimes/blue_yi.py so
 # is_installed() can honour it without importing the adapter (which would pull
@@ -91,7 +91,7 @@ class RuntimeManifest:
 PIPER_YI_BASE_URL = (
     "https://huggingface.co/spaces/notmax123/phonikud-yi-blue-tts/resolve/main"
 )
-BLUE_MODEL_BASE_URL = "https://huggingface.co/notmax123/BlueTTS2.5-onnx/resolve/main"
+BLUE_MODEL_BASE_URL = "https://huggingface.co/notmax123/blue-yi/resolve/main"
 
 PIPER_YI_FILES: tuple[ModelFile, ...] = (
     ModelFile(name="model.onnx", url=f"{PIPER_YI_BASE_URL}/model.onnx"),
@@ -106,7 +106,7 @@ PIPER_YI = RuntimeManifest(
     version="piper-yi-0.1",
     size="~61 MB",
     description=(
-        "Lightweight fallback: 61 MB and 22.05 kHz against BlueTTS 2.5's 282 MB "
+        "Lightweight fallback: 61 MB and 22.05 kHz against blue-yi's 281 MB "
         "and 44.1 kHz, and it loads in a fraction of the time. The acoustic model "
         "itself is Hebrew-trained (espeak voice \"he\", single speaker) and has not "
         "been retrained on Yiddish audio, so it renders Yiddish phonemes with a "
@@ -130,8 +130,8 @@ PIPER_YI = RuntimeManifest(
     available=True,
 )
 
-# The full file list from the 2.5 manifest.json, in its own order, plus the
-# saved voices it lists under "voices". duration_predictor.onnx and
+# The file list from blue-yi's onnx/manifest.json plus the saved voices, which
+# sit at the repo root rather than under onnx/. duration_predictor.onnx and
 # reference_encoder.onnx are part of the bundle and are listed for completeness,
 # but the adapter never opens them (both need z_ref, and the autoencoder encoder
 # that would produce it was not exported), so they are absent from
@@ -140,18 +140,17 @@ BLUE_YI_FILES: tuple[ModelFile, ...] = tuple(
     ModelFile(name=name, url=f"{BLUE_MODEL_BASE_URL}/{name}")
     for name in (
         "README.md",
-        "manifest.json",
-        "tts.json",
-        "vocab.json",
-        "stats.npz",
-        "uncond.npz",
-        "duration_predictor.onnx",
-        "duration_predictor_style.onnx",
-        "reference_encoder.onnx",
-        "text_encoder.onnx",
-        "vector_estimator.onnx",
-        "vocoder.onnx",
-        "voices/female.json",
+        "onnx/manifest.json",
+        "onnx/tts.json",
+        "onnx/vocab.json",
+        "onnx/stats.npz",
+        "onnx/uncond.npz",
+        "onnx/duration_predictor.onnx",
+        "onnx/duration_predictor_style.onnx",
+        "onnx/reference_encoder.onnx",
+        "onnx/text_encoder.onnx",
+        "onnx/vector_estimator.onnx",
+        "onnx/vocoder.onnx",
         "voices/libri_female_1088.json",
         "voices/libri_female_6147.json",
         "voices/libri_male_6209.json",
@@ -162,15 +161,14 @@ BLUE_YI_FILES: tuple[ModelFile, ...] = tuple(
 # Exactly what runtimes/blue_yi.py opens: the four usable graphs, the two npz
 # tensor files, the two JSON configs, and the voice styles it discovers.
 BLUE_YI_REQUIRED_FILES: tuple[str, ...] = (
-    "tts.json",
-    "vocab.json",
-    "stats.npz",
-    "uncond.npz",
-    "duration_predictor_style.onnx",
-    "text_encoder.onnx",
-    "vector_estimator.onnx",
-    "vocoder.onnx",
-    "voices/female.json",
+    "onnx/tts.json",
+    "onnx/vocab.json",
+    "onnx/stats.npz",
+    "onnx/uncond.npz",
+    "onnx/duration_predictor_style.onnx",
+    "onnx/text_encoder.onnx",
+    "onnx/vector_estimator.onnx",
+    "onnx/vocoder.onnx",
     "voices/libri_female_1088.json",
     "voices/libri_female_6147.json",
     "voices/libri_male_6209.json",
@@ -179,27 +177,30 @@ BLUE_YI_REQUIRED_FILES: tuple[str, ...] = (
 
 BLUE_YI = RuntimeManifest(
     id="blue_yi",
-    name="BlueTTS 2.5 (Yiddish IPA)",
+    name="blue-yi (Yiddish)",
     version="bluetts-2.5",
     # manifest.json's own file sizes sum to 280.1 MB; the five voice JSONs add
     # 1.4 MB, so a full snapshot_download of this repo is 281.5 MB on disk.
-    size="~282 MB",
+    size="~281 MB",
     description=(
-        "The default runtime. Yiddish (`yi`) is one of the checkpoint's declared "
-        "languages and its latent statistics were exported from stats_yiddish.pt, "
-        "so this is a Yiddish-aware acoustic model rather than a Hebrew one driven "
-        "with Yiddish phonemes. 44.1 kHz output, four saved voices, and a "
-        "character-level vocab that covers the Yiddish closed inventory outright — "
-        "ʦ, ʧ, ʤ, ɡ and ŋ are single embeddings here, so every phone reaches the "
-        "model unfolded and none is dropped (a few punctuation characters the "
-        "engine passes through are outside the vocab and are removed silently; "
-        "they carry no sound). The honest caveat: every offered voice is a "
-        "Hebrew or English reader, so a foreign accent is likely even though "
-        "every phone is rendered."
+        "The default runtime, and a Yiddish-trained model rather than a "
+        "multilingual one borrowed for Yiddish: its manifest declares `yi` "
+        "alone, its latent statistics come from stats_yiddish.pt, and it was "
+        "trained on IPA from this same phonikud-yi engine (step 817,000). "
+        "44.1 kHz output, four saved voices, and a character vocab that covers "
+        "the Yiddish closed inventory outright — ʦ, ʧ, ʤ, ɡ and ŋ are single "
+        "embeddings, so every phone reaches the model unfolded and none is "
+        "dropped (a few punctuation characters the engine passes through are "
+        "outside the vocab and are removed silently; they carry no sound). "
+        "Two caveats: the four saved voices are LibriTTS-R readers of English, "
+        "so speaker identity carries a foreign colour even though the phonology "
+        "is Yiddish; and the duration predictor emits one total length with no "
+        "monotonic alignment, so a sentence whose predicted total runs short "
+        "can swallow a word."
     ),
     # Only a hint for a manual local install: the adapter loads the bundle from
     # the huggingface_hub cache (or BLUE25_MODEL_DIR), never from the repo root.
-    directory="bluetts-2.5",
+    directory="blue-yi",
     install_kind=InstallKind.FILES,
     files=BLUE_YI_FILES,
     required_files=BLUE_YI_REQUIRED_FILES,

@@ -4,13 +4,9 @@ Yiddish text goes through the phonikud-yi engine (v5 diacritizer + G2P) to get
 nikud and closed-inventory IPA, and the IPA drives an acoustic runtime. The
 Space exposes a MamboTTS-shaped API under ``/v1`` alongside a small web UI.
 
-The default runtime (``DEFAULT_RUNTIME_ID``) is BlueTTS 2.5: 44.1 kHz, five
-fixed voices, and a character vocabulary that covers the whole closed Yiddish
-inventory, so nothing is folded on the way in. Yiddish is one of its declared
-training languages and its latent statistics come from ``stats_yiddish.pt``, so
-the honest caveat is narrower than "wrong language": all five bundled speakers
-are Hebrew or English readers, so expect a foreign accent in vowel colour and
-rhythm. See ``registry.BLUE_YI``.
+The default runtime (``DEFAULT_RUNTIME_ID``) is blue-yi: a Yiddish-trained
+flow-matching acoustic model at 44.1 kHz with four saved voices, whose
+character vocabulary covers the closed Yiddish inventory outright.
 
 ``piper_yi`` is the lightweight 22.05 kHz fallback, and it is the one carrying
 the stronger caveat: a Hebrew-trained Piper checkpoint (espeak voice ``he``,

@@ -36,16 +36,21 @@
                {% if runtime_state and runtime_state.runtime == "piper_yi" %}style="display: none"{% endif %}>
         <i class="fas fa-circle-info notice-icon" aria-hidden="true"></i>
         <div class="notice-body">
-          <strong>About the voice (BlueTTS&nbsp;2.5).</strong>
-          Yiddish is one of the languages this acoustic model declares, and its latent
-          statistics were exported from <code class="mono">stats_yiddish.pt</code>. Every unit of the
-          closed Yiddish inventory &mdash; including <span class="mono">ʦ ʧ ʤ ɡ ŋ</span> and the
-          marks <span class="mono">ˈ ː</span> &mdash; is present in its character vocabulary, so
-          <strong>every phone reaches the model unfolded and none is dropped</strong>. (Phones, that
-          is: a few punctuation characters the engine passes through are outside its vocabulary and
-          are dropped silently, carrying no sound with them.)
-          The narrower caveat is the voices: the five bundled speakers are Hebrew and English
-          readers, so a foreign accent on Yiddish is likely, mostly in vowel colour and rhythm.
+          <strong>About the voice (blue-yi).</strong>
+          This checkpoint is <strong>trained for Yiddish</strong>, not a multilingual model
+          borrowed for it: its manifest declares <span class="mono">yi</span> alone, its latent
+          statistics come from <code class="mono">stats_yiddish.pt</code>, and it was trained on
+          IPA produced by this same phonikud-yi engine. Every unit of the closed inventory &mdash;
+          including <span class="mono">ʦ ʧ ʤ ɡ ŋ</span> and the marks <span class="mono">ˈ ː</span>
+          &mdash; is a single embedding in its vocabulary, so <strong>every phone reaches the model
+          unfolded and none is dropped</strong>. (A few punctuation characters the engine passes
+          through are outside the vocabulary and are removed silently; they carry no sound.)
+          Two honest caveats. The four saved voices are LibriTTS-R readers of English, so the
+          <em>speaker identity</em> carries a foreign colour even though the phonology is Yiddish;
+          any 44.1&nbsp;kHz recording can be used as a reference instead. And the duration
+          predictor emits one <em>total</em> length rather than per-phoneme durations, with no
+          monotonic alignment &mdash; when that total runs short the model compresses, and a word
+          can be swallowed. If a word goes missing, generate again or shorten the sentence.
         </div>
       </section>
 
@@ -137,7 +142,7 @@
               </div>
             </div>
             <p class="control-note">
-              These two are BlueTTS&nbsp;2.5 controls; the Piper fallback ignores them.
+              These two are blue-yi controls; the Piper fallback ignores them.
               <strong>n_steps</strong> (default 8) is how many flow-matching steps the vector
               estimator runs &mdash; more steps sound better and take longer. Measured on this
               machine for about 1.2&nbsp;s of audio: 4&nbsp;steps 121&nbsp;ms,
@@ -293,7 +298,7 @@
                 rejected outright &mdash; a bare <span class="mono">ː</span> included, since length
                 exists only inside the single unit <span class="mono">aː</span>. Units the loaded
                 voice's vocabulary lacks are folded and reported below;
-                BlueTTS&nbsp;2.5 lacks none of them.
+                blue-yi lacks none of them.
               </p>
               <textarea
                 autocomplete="off"
@@ -346,7 +351,7 @@
               &mdash; those units are either outside the closed Yiddish inventory or missing from the
               loaded voice's vocabulary, so they were folded to the nearest thing it can say, or
               dropped. It should stay hidden on both runtimes for engine-produced Yiddish:
-              BlueTTS&nbsp;2.5 covers the whole inventory, and the Piper fallback folds
+              blue-yi covers the whole inventory, and the Piper fallback folds
               <span class="mono">ʧ</span>/<span class="mono">ʤ</span> to
               <span class="mono">tʃ</span>/<span class="mono">dʒ</span> successfully, which is a
               substitution rather than a loss and is listed under the inventory above instead. What
@@ -476,7 +481,7 @@
               <dd class="mono small" id="panel-voices">&mdash;</dd>
             </dl>
             <p class="small muted">
-              Two runtimes, two sample rates: BlueTTS&nbsp;2.5 is the default at 44.1&nbsp;kHz with
+              Two runtimes, two sample rates: blue-yi is the default at 44.1&nbsp;kHz with
               four saved voices, and the Piper fallback is single-speaker at 22.05&nbsp;kHz. Switching
               the runtime above loads it through <span class="mono">POST /v1/models/load</span>.
             </p>

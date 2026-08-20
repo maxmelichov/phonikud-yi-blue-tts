@@ -83,13 +83,17 @@ CANARY_IPA = "mit a pˈur jur ʦirˈik"
 # validated against (BLUE25_RECIPE.md §10: measured 123.5-130.9 Hz for the 128 Hz
 # male, 208.0-216.2 for the 211 Hz female, 170.3-195.6 for the 180 Hz female).
 # A 30 % band absorbs that honest utterance-to-utterance spread — this Space
-# renders at speed 1.0 rather than the reference's 1.2 and its own measurements
+# Figures are blue-yi's own model card, which documents lower pitches than the
+# BlueTTS 2.5 bundle did for the same LibriTTS-R speakers (the styles were
+# re-encoded for this checkpoint, so they are not the same vectors).
+# The band stays wide because this Space
 # sit 10-16 % above the card — while still rejecting the 231 Hz tonal drone the
 # wrong latent fold produced on the 128 Hz male voice (band top 166 Hz).
 BLUE_VOICE_F0_HZ: dict[str, float] = {
-    "Berl": 128.0,          # libri_male_6209
-    "Rukhl": 211.0,         # libri_female_6147
-    "Sheyndl": 204.0,       # libri_female_1088
+    "Berl": 115.0,          # libri_male_6209
+    "Hershl": 110.0,        # libri_male_8088
+    "Sheyndl": 165.0,       # libri_female_1088
+    "Rukhl": 184.0,         # libri_female_6147
 }
 
 #: Which offered voices are male. The style-file stems used to carry this
@@ -679,7 +683,7 @@ except Exception as exc:  # noqa: BLE001
 # ---------------------------------------------------------------------------
 # 6. blue 2.5 runtime (the default) — THE SECOND DEPLOYMENT GUARD
 # ---------------------------------------------------------------------------
-section("blue 2.5 runtime (default)")
+section("blue-yi runtime (default)")
 try:
     import numpy as np
 
@@ -687,7 +691,7 @@ try:
     from yiddish_phonikud import runtimes
 
     blue_rt = runtimes.load_default()
-    check(blue_rt.id == "blue_yi", "load_default() loads Blue 2.5", blue_rt.id)
+    check(blue_rt.id == "blue_yi", "load_default() loads blue-yi", blue_rt.id)
     check(
         blue_rt.sample_rate == 44100,
         "blue runtime reports 44100 Hz",

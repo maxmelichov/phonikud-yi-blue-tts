@@ -4,9 +4,9 @@ Hasidic (Unterland/Central) Yiddish text-to-speech. Hebrew-script Yiddish goes t
 [`notmax123/phonikud-yi-engine`](https://huggingface.co/notmax123/phonikud-yi-engine) stack
 (G2P over a closed phone inventory, with a v5 pointing model for display), and the resulting
 IPA drives an acoustic runtime — by default
-[**BlueTTS 2.5**](https://huggingface.co/notmax123/BlueTTS2.5-onnx) at 44.1 kHz.
+[**blue-yi**](https://huggingface.co/notmax123/blue-yi) at 44.1 kHz.
 
-> **What the voices are.** BlueTTS 2.5 declares Yiddish among its languages and its latent
+> **What the voices are.** blue-yi declares Yiddish among its languages and its latent
 > statistics were exported from `stats_yiddish.pt`, and its character vocab covers the entire
 > closed Yiddish inventory — `ʦ ʧ ʤ ɡ ŋ ˈ` and the `aː` length mark included — so **every phone
 > reaches the model unfolded and none is dropped**. (That is a claim about phones. A handful of
@@ -37,7 +37,7 @@ recognise every payload.
 - Content type: `application/json` in and out, except `POST /v1/audio/speech` (audio bytes) and
   `POST /generate` (form in, JSON out).
 
-Cold start: the first startup downloads the ~1.23 GB engine snapshot and the ~282 MB acoustic
+Cold start: the first startup downloads the ~1.23 GB engine snapshot and the ~281 MB acoustic
 bundle. `app.py` does both on a background thread, so `GET /` and `GET /health` answer
 immediately while the warm-up runs. Set `PHONIKUD_YI_ENGINE_DIR` to an unpacked engine bundle to
 skip the engine download entirely.
@@ -104,7 +104,7 @@ The pipeline, in order:
    *engine* output is reported in `unsupported` and still spoken, because refusing would turn a
    G2P quirk into an outage.
 3. **fold** – rewrite units the loaded voice's vocabulary lacks (`ʧ`→`tʃ`, `ʤ`→`dʒ`, …). A
-   no-op on BlueTTS 2.5, which lacks none of them. A **phone** that cannot be folded is dropped
+   no-op on blue-yi, which lacks none of them. A **phone** that cannot be folded is dropped
    and reported in `unsupported` / `X-Dropped-Units`. Punctuation the vocabulary cannot spell is
    dropped silently and never reported: it is structure, not a phone, so nothing audible is lost.
 4. **chunk** – long text is split per sentence (200 characters, never inside a multiword lexicon
@@ -158,9 +158,9 @@ Two runtimes ship, and **they do not share a sample rate**. Read it from
 
 | | `blue_yi` (default) | `piper_yi` (fallback) |
 | --- | --- | --- |
-| Model | BlueTTS 2.5 ONNX, flow-matching | Piper VITS ONNX |
+| Model | blue-yi ONNX, flow-matching | Piper VITS ONNX |
 | Sample rate | **44100 Hz** | **22050 Hz** |
-| On disk | ~282 MB, fetched from `notmax123/BlueTTS2.5-onnx` | ~61 MB, committed beside `app.py` |
+| On disk | ~281 MB, fetched from `notmax123/blue-yi` | ~61 MB, committed beside `app.py` |
 | Voices | `Berl`, `Hershl`, `Rukhl`, `Sheyndl` | one, unnamed |
 | Yiddish phones | complete: nothing folded, nothing dropped | `ʧ`, `ʤ` folded to `tʃ`, `dʒ` |
 | Extra options | `n_steps` (8), `cfg_scale` (4.0), `seed` | none; these three are ignored |
@@ -249,7 +249,7 @@ curl -s http://localhost:7860/v1/models/sources \
 ```
 
 ```json
-{"id":"blue_yi","size":"~282 MB","installed":true,"available":true,"fixed":true}
+{"id":"blue_yi","size":"~281 MB","installed":true,"available":true,"fixed":true}
 {"id":"piper_yi","size":"~61 MB","installed":true,"available":true,"fixed":false}
 ```
 
@@ -273,7 +273,7 @@ curl -s -X POST http://localhost:7860/v1/models/load \
 ```
 
 ```json
-{"status":"loaded","runtime":"blue_yi","model":"BlueTTS 2.5 (Yiddish IPA)"}
+{"status":"loaded","runtime":"blue_yi","model":"blue-yi (Yiddish IPA)"}
 ```
 
 Errors: `400 invalid_request` (unknown id), `503 not_available` (`available: false`, or required
@@ -297,7 +297,7 @@ curl -s http://localhost:7860/v1/models/state
 ```
 
 ```json
-{"loaded":true,"runtime":"blue_yi","model":"BlueTTS 2.5 (Yiddish IPA)","path":"/root/.cache/huggingface/hub/models--notmax123--BlueTTS2.5-onnx/snapshots/468da64b4a51795a7594a3637727dbaf876b6df2","sample_rate":44100}
+{"loaded":true,"runtime":"blue_yi","model":"blue-yi (Yiddish IPA)","path":"/root/.cache/huggingface/hub/models--notmax123--blue-yi/snapshots/468da64b4a51795a7594a3637727dbaf876b6df2","sample_rate":44100}
 ```
 
 ---
@@ -477,8 +477,8 @@ Request — `SpeechBody`:
 | `input_is_nikud` | `bool` | `false` | Declare `input` as pointed Yiddish: the pointing is read by the G2P and the v5 model is not run. Ignored when `input_is_phonemes` is set. |
 | `speed` | `float` | `1.0` | `0.5`–`2.0`. Above `1.0` is faster. |
 | `stream` | `bool` | `false` | Framed stream instead of one WAV body. |
-| `n_steps` | `int \| null` | `null` → 8 | Flow-matching steps, `1`–`32`. BlueTTS 2.5 only; ignored by Piper. |
-| `cfg_scale` | `float \| null` | `null` → 4.0 | Guidance strength, `1.0`–`8.0`; `1.0` disables guidance and halves the work. BlueTTS 2.5 only. |
+| `n_steps` | `int \| null` | `null` → 8 | Flow-matching steps, `1`–`32`. blue-yi only; ignored by Piper. |
+| `cfg_scale` | `float \| null` | `null` → 4.0 | Guidance strength, `1.0`–`8.0`; `1.0` disables guidance and halves the work. blue-yi only. |
 | `seed` | `int \| null` | `null` | Sampler noise seed, for reproducible output. Omit for a fresh draw. Ignored by the deterministic Piper voice. |
 
 Non-streaming response: `200`, `Content-Type: audio/wav`, body = a complete mono 16-bit PCM WAV
@@ -599,9 +599,9 @@ uses — the two cannot produce different phonemes for the same input.
 | `phonemes` | `string` | `""` | Used by `phonemes` mode. Same 4000-character cap. |
 | `voice` | `string` | `""` | Voice name; empty uses the runtime default. An unknown name is a 400. |
 | `speed` | `float` | `1.0` | Same bounds as `SpeechBody.speed`: `0.5`–`2.0`. |
-| `n_steps` | `int` | unset → 8 | `1`–`32`. BlueTTS 2.5 only. |
-| `cfg_scale` | `float` | unset → 4.0 | `1.0`–`8.0`. BlueTTS 2.5 only. |
-| `seed` | `int` | unset | Sampler seed, `0`–`2147483647`. BlueTTS 2.5 only. |
+| `n_steps` | `int` | unset → 8 | `1`–`32`. blue-yi only. |
+| `cfg_scale` | `float` | unset → 4.0 | `1.0`–`8.0`. blue-yi only. |
+| `seed` | `int` | unset | Sampler seed, `0`–`2147483647`. blue-yi only. |
 
 There is deliberately **no** `runtime` form field: `/generate` always uses the resident runtime
 (loading the default if none is). The demo page switches runtime with `POST /v1/models/load`
@@ -682,7 +682,7 @@ whitespace. It never cuts inside a word, never at a maqaf `־`, and never inside
 whitespace-spelled multiword lexicon entry, so a streamed utterance and a non-streamed one say
 the same thing.
 
-Chunking is a **requirement, not an optimisation**, for BlueTTS 2.5, and it therefore happens on
+Chunking is a **requirement, not an optimisation**, for blue-yi, and it therefore happens on
 **both** paths, not only this one: the acoustic model renders exactly one utterance per call and
 refuses text longer than 240 encoder tokens (the point past which its duration predictor stops
 lengthening the utterance and starts cramming the same words into less time). The non-streaming
@@ -826,9 +826,9 @@ retype them: `"ɡ" == "g"` is `False`, and a mixed-up script-g turns every /ɡ/ 
 phone. Punctuation is not a phone and not a violation: the characters the engine splices around
 a token (`. , ! ? ; : ( ) [ ] … -` and friends) pass validation untouched.
 
-### What BlueTTS 2.5 covers, and what the Piper fallback folds
+### What blue-yi covers, and what the Piper fallback folds
 
-BlueTTS 2.5's `vocab.json` maps every unit of the inventory, `ʦ` (155), `ʧ` (184), `ʤ` (182),
+blue-yi's `vocab.json` maps every unit of the inventory, `ʦ` (155), `ʧ` (184), `ʤ` (182),
 `ɡ` (66), `ŋ` (44), `ˈ` (120) and `ː` (122) included — the affricates are single ids there, not
 `t`+`s` pairs — so `runtime_vocab_missing` is empty and `fold_to_vocab` is a no-op. Two traps
 worth knowing if you write IPA by hand: ASCII `'` (U+0027) is also in that vocab as id 5, so it

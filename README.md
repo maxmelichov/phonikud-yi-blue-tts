@@ -8,7 +8,7 @@ app_file: app.py
 pinned: false
 models:
   - notmax123/phonikud-yi-engine
-  - notmax123/BlueTTS2.5-onnx
+  - notmax123/blue-yi
 tags:
   - yiddish
   - text-to-speech
@@ -28,11 +28,11 @@ Yiddish text goes in; nikud, IPA and audio come out. The linguistic work is done
 [**phonikud-yi**](https://huggingface.co/notmax123/phonikud-yi-engine) — a deterministic
 text → nikud → IPA stack adapted from *Phonikud*
 ([arXiv 2506.12311](https://arxiv.org/abs/2506.12311)) — and the waveform by
-[**BlueTTS 2.5**](https://huggingface.co/notmax123/BlueTTS2.5-onnx), a flow-matching ONNX
+[**blue-yi**](https://huggingface.co/notmax123/blue-yi), a flow-matching ONNX
 model at 44.1 kHz with four saved voices. A 22.05 kHz Piper voice stays in the image as a
 lightweight fallback. Read [Limitations](#limitations) before you judge the audio.
 
-The engine (~1.23 GB, including the v5 pointing model) and the acoustic bundle (~282 MB) are
+The engine (~1.23 GB, including the v5 pointing model) and the acoustic bundle (~281 MB) are
 pulled with `huggingface_hub` on a background thread at startup, so the page serves
 immediately and the first synthesis request waits for the warm-up to finish.
 
@@ -92,7 +92,7 @@ declared by the spec but unattested in engine output — `זינגען` is `zˈi
 
 `ɡ` is U+0261 (script g), not ASCII `g`, and `ʦ ʧ ʤ` are single codepoints (U+02A6, U+02A7,
 U+02A4), not the sequences `ts tʃ dʒ`. `GET /v1/phonemes/inventory` returns the live set plus
-the units the loaded voice's vocabulary lacks. For **BlueTTS 2.5 that list is empty**: its
+the units the loaded voice's vocabulary lacks. For **blue-yi that list is empty**: its
 character vocab carries every unit of the inventory, marks included, so every phone reaches the
 model unfolded and none is dropped. (Phones. A few punctuation characters the engine passes
 through — `[ ] ׃ „ ‚ ‹ › | < > { }` — are outside that vocab and are removed silently; they
@@ -199,7 +199,7 @@ rules and a Python client are in [`docs/API.md`](docs/API.md#streaming-frame-for
 `installed` (are the required files present?) and `available` (does this build implement the
 runtime?):
 
-- **`blue_yi`** — *the default.* BlueTTS 2.5, ~282 MB, **44.1 kHz**, four saved voices:
+- **`blue_yi`** — *the default.* blue-yi, ~281 MB, **44.1 kHz**, four saved voices:
   `Berl` and `Hershl` (male), `Rukhl` and `Sheyndl` (female). These are presentation
   names for the bundle's LibriTTS-derived style files, whose own stems name a corpus
   speaker id; the raw stems stay accepted as aliases.
@@ -247,7 +247,7 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
 
 ## Limitations
 
-- **The voices are not Yiddish readers.** BlueTTS 2.5 knows the phones — every unit of the
+- **The voices are not Yiddish readers.** blue-yi knows the phones — every unit of the
   Yiddish inventory is in its vocab, so nothing is folded or dropped — but all five bundled
   speakers are Hebrew or English readers. Expect a foreign accent, mostly in vowel colour and
   rhythm. A natively-read Yiddish voice would need new recordings and is future work.
@@ -268,7 +268,7 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
 - **Non-Yiddish tokens are quarantined, not read.** Digits, Latin text and URLs are dropped
   from the spoken string — there is no Yiddish numeral reader yet — and so are single-letter
   geresh abbreviations (`ד'`, `ס'`).
-- **Long text is chunked, on every path.** BlueTTS 2.5 renders one utterance per call and
+- **Long text is chunked, on every path.** blue-yi renders one utterance per call and
   refuses text past 240 encoder tokens — the point where its duration predictor stops
   lengthening the utterance and starts cramming — so text is split per sentence at 200
   characters and the pieces are concatenated with a 60 ms gap. Streaming emits those same
@@ -287,7 +287,7 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
   ([arXiv 2506.12311](https://arxiv.org/abs/2506.12311)), the method this stack adapts.
 - **phonikud-yi** — the Yiddish G2P engine, gold lexicon and v5 pointing model:
   [notmax123/phonikud-yi-engine](https://huggingface.co/notmax123/phonikud-yi-engine).
-- **BlueTTS 2.5** — the default acoustic model:
-  [notmax123/BlueTTS2.5-onnx](https://huggingface.co/notmax123/BlueTTS2.5-onnx).
+- **blue-yi** — the default acoustic model:
+  [notmax123/blue-yi](https://huggingface.co/notmax123/blue-yi).
 - **Piper** — the fallback ONNX synthesis runtime, via `piper-onnx`.
 - The gold lexicon exists because a native speaker sat down and ruled on it word by word.
