@@ -584,6 +584,45 @@ try:
         f"תכשיט -> (quarantined), טאַכשעט -> {rescued}",
     )
 
+    # --- pointing-model head wiring ----------------------------------------
+    # yiddish_nikud unpacks session.run() as (nikud, shin, rafe) positionally,
+    # and its own guard only compares the SORTED head sizes -- [2, 2, 22]
+    # against [2, 2, 22]. shin and rafe are both 2, so that guard passes just as
+    # happily with those two heads swapped, and a swap is silent: rafe marks
+    # would land on ש and shin dots on בכפגדת. The classes ARE distinguishable
+    # by content even though the sizes are not, so check the content. (The
+    # deployed export is wired correctly today; this is what would notice if a
+    # re-export ever reordered the heads.)
+    import json as _json  # noqa: PLC0415
+
+    from yiddish_nikud import YiddishNikud  # noqa: PLC0415
+
+    _n = YiddishNikud()
+    _meta = _n._session.get_modelmeta().custom_metadata_map
+    _names = [o.name for o in _n._session.get_outputs()]
+    check(
+        _names == ["nikud_logits", "shin_logits", "rafe_logits"],
+        "pointing heads are in the order the decoder unpacks them",
+        " -> ".join(_names),
+    )
+    check(
+        _json.loads(_meta["shin_classes"]) == ["\u05c1", "\u05c2"],
+        "the shin head really carries the shin/sin dots",
+        repr(_json.loads(_meta["shin_classes"])),
+    )
+    check(
+        _json.loads(_meta["rafe_classes"]) == ["", "\u05bf"],
+        "the rafe head really carries the rafe mark",
+        repr(_json.loads(_meta["rafe_classes"])),
+    )
+    # End to end: a swap would put the wrong mark on both letters at once.
+    _pointed = engine.text_to_nikud("שבת")
+    check(
+        "\u05c1" in _pointed and "\u05bf" not in _pointed,
+        "heads land on the right letters end to end",
+        f"שבת -> {_pointed}",
+    )
+
 except Exception as exc:  # noqa: BLE001
     dep = missing_dep(exc)
     if dep:
