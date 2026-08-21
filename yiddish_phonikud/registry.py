@@ -25,7 +25,12 @@ DEFAULT_RUNTIME_ID = "blue_yi"
 # this catalog is fed IPA produced by it, so it is downloaded unconditionally
 # at startup rather than being listed as a per-runtime file.
 ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
-ENGINE_REVISION = "main"
+# PINNED to a commit for the same reason blue-yi is (below): the engine decides
+# every phoneme the voice speaks, and tracking a branch means a cold cache can
+# fetch a new bundle unvetted. This is the v6 bundle: pointing model retrained
+# on chain-attested supervision (paired phonetic eval vs v5: +25/-10 on the
+# held-out test set), model_pointed_lk at 7,649 types.
+ENGINE_REVISION = "89e9839abebfeb2d374688c8d5e86d2168297acc"
 
 # The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries
