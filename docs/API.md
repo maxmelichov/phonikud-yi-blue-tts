@@ -456,6 +456,41 @@ no Yiddish numeral reader in the engine.
 
 ---
 
+### `GET /v1/lexicon/me`
+
+Who is signed in, and whether they may edit the lexicon. Public. `can_edit` is true only for
+Hugging Face user `ABE101` (or `LEXICON_EDITOR_USER` if that Space variable is set). Login and
+logout URLs are `/oauth/huggingface/login` and `/oauth/huggingface/logout`.
+
+### `GET /v1/lexicon/lookup`
+
+Look up one type in the live engine tables. **ABE101 only** — unauthenticated callers get
+`401 forbidden`, any other signed-in user `403 forbidden`.
+
+### `POST /v1/lexicon/update`
+
+Write a gold-tier reading (and optional וי class `oʊ` / `ɔj`) for one type. **ABE101 only**.
+IPA must be inside the closed inventory. New types are allowed only as a single Hebrew-script
+token. Persisted to `LEXICON_EDITS_DATASET` when `HF_TOKEN` can write, else a local cache.
+This is the overwrite path: it will replace an existing row.
+
+### `POST /v1/lexicon/add`
+
+Insert a type that is **not** already in gold / overlay / Latin. **ABE101 only**. Same body
+and validation as update. If the type already exists, the response is `400 invalid_request`
+with a message like `already exists in GOLD_LEXICON as …; use update, not add` — add never
+silently clobbers; use `POST /v1/lexicon/update` (Save reading) to overwrite.
+
+New וי words default to class `ɔj` unless `vav_yud_class` is explicitly `oʊ` (û-class 54).
+The IPA is rewritten accordingly when it contains `oʊ` / `ɔj`. Persistence is the same
+overlay + dataset path as update.
+
+### `GET /v1/lexicon/edits`
+
+The persisted ABE101 edit list. **ABE101 only**.
+
+---
+
 ### `POST /v1/audio/speech`
 
 Synthesis. Returns one `audio/wav` body, or a framed binary stream when `stream: true`.

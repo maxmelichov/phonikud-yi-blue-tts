@@ -119,6 +119,43 @@ a:hover {
   margin-bottom: 18px;
 }
 
+.header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.auth-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex-shrink: 0;
+}
+
+.auth-link {
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.auth-who {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.lexicon-editor {
+  margin-top: 18px;
+}
+
+.lexicon-editor .action-row {
+  margin-top: 12px;
+}
+
 .header h1 {
   font-size: 1.7rem;
   font-weight: 700;

@@ -29,6 +29,7 @@ ERROR_CODES = (
     "not_found",
     "method_not_allowed",
     "internal_error",
+    "forbidden",
 )
 
 

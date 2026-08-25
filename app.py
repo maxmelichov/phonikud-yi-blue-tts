@@ -19,7 +19,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from yiddish_phonikud import __version__, engine
+from yiddish_phonikud import __version__, auth, engine
+from yiddish_phonikud.api.routes_lexicon import router as lexicon_router
 from yiddish_phonikud.api.routes_ui import router as ui_router
 from yiddish_phonikud.api.routes_v1 import WarmupState, write_error
 from yiddish_phonikud.api.routes_v1 import router as v1_router
@@ -154,6 +155,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 #: invalid_request (4xx).
 _STATUS_CODES: dict[int, str] = {
     400: "invalid_request",
+    401: "forbidden",
+    403: "forbidden",
     404: "not_found",
     405: "method_not_allowed",
     # No 413 entry: nothing in this app emits it. Over-long bodies are rejected
@@ -215,7 +218,9 @@ def create_app() -> FastAPI:
     )
     app.mount("/static", StaticFiles(directory=str(ROOT / "static")), name="static")
     app.include_router(v1_router)
+    app.include_router(lexicon_router)
     app.include_router(ui_router)
+    auth.attach_space_oauth(app)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_error_handler)
     app.add_exception_handler(Exception, unhandled_error_handler)

@@ -216,6 +216,14 @@ def load() -> None:
 
         _labels, _g2p = yiddish_labels, yiddish_g2p
         log.info("engine loaded from %s", path)
+        # וי policy + persisted ABE101 gold overlays sit on top of the frozen
+        # snapshot so a Space restart does not lose native corrections, and so
+        # the downloaded engine's old אויך=oʊx row cannot win.
+        try:
+            from . import lexicon_edits  # noqa: PLC0415 — after a successful load
+            lexicon_edits.apply_to_engine(_g2p)
+        except Exception as exc:  # noqa: BLE001 - overlay must not take down TTS
+            log.exception("lexicon overlay failed: %s", exc)
 
 
 def is_loaded() -> bool:

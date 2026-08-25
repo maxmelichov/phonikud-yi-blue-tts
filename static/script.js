@@ -403,4 +403,129 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   initControls();
+  initLexiconEditor();
 });
+
+function initLexiconEditor() {
+  const editor = el("lexicon-editor");
+  const login = el("auth-login");
+  const logout = el("auth-logout");
+  const who = el("auth-who");
+  const status = el("lex-status");
+  if (!editor) return;
+
+  function setLexStatus(text, kind) {
+    if (!status) return;
+    status.textContent = text || "";
+    status.className = "small" + (kind ? " status-" + kind : "");
+  }
+
+  fetch("/v1/lexicon/me", { credentials: "same-origin" })
+    .then((r) => r.json())
+    .then((me) => {
+      if (me.username) {
+        if (login) login.hidden = true;
+        if (who) {
+          who.hidden = false;
+          who.textContent = me.can_edit
+            ? "Signed in as " + me.username + " (editor)"
+            : "Signed in as " + me.username;
+        }
+        if (logout) logout.hidden = false;
+      }
+      if (me.can_edit) {
+        editor.hidden = false;
+      }
+    })
+    .catch(() => {
+      /* public path: TTS still works without OAuth */
+    });
+
+  const lookupBtn = el("lex-lookup");
+  const saveBtn = el("lex-save");
+  const addBtn = el("lex-add");
+
+  function lexPayload() {
+    const word = (el("lex-word") && el("lex-word").value) || "";
+    const ipa = (el("lex-ipa") && el("lex-ipa").value) || "";
+    const variantsRaw = (el("lex-variants") && el("lex-variants").value) || "";
+    const note = (el("lex-note") && el("lex-note").value) || "";
+    const klass = (el("lex-class") && el("lex-class").value) || "";
+    const variants = variantsRaw
+      ? variantsRaw.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+      : null;
+    return {
+      word: word,
+      ipa_primary: ipa,
+      variants: variants,
+      note: note,
+      vav_yud_class: klass || null,
+    };
+  }
+
+  async function postLexicon(path, busyLabel, okVerb) {
+    setLexStatus(busyLabel);
+    try {
+      const response = await fetch(path, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lexPayload()),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setLexStatus((body.error && body.error.message) || "request failed", "err");
+        return;
+      }
+      setLexStatus(
+        okVerb + " " + body.word + " → " + body.ipa_primary + " (" + (body.persisted || "") + ")",
+        "ok"
+      );
+    } catch (err) {
+      setLexStatus(String(err), "err");
+    }
+  }
+
+  if (lookupBtn) {
+    lookupBtn.addEventListener("click", async () => {
+      const word = (el("lex-word") && el("lex-word").value) || "";
+      setLexStatus("Looking up…");
+      try {
+        const response = await fetch(
+          "/v1/lexicon/lookup?word=" + encodeURIComponent(word),
+          { credentials: "same-origin" }
+        );
+        const body = await response.json();
+        if (!response.ok) {
+          setLexStatus((body.error && body.error.message) || "lookup failed", "err");
+          return;
+        }
+        if (el("lex-ipa")) el("lex-ipa").value = body.ipa_primary || "";
+        if (el("lex-variants")) el("lex-variants").value = (body.variants || []).join(" | ");
+        if (el("lex-note")) el("lex-note").value = body.note || "";
+        if (el("lex-class") && body.vav_yud_class) el("lex-class").value = body.vav_yud_class;
+        const flag = body.flagged ? " FLAG: " + body.flag_reason : "";
+        setLexStatus(
+          (body.found
+            ? "Found in " + body.table + " — use Save reading to overwrite"
+            : "Not in lexicon — use Add word") +
+            (body.vav_yud_class ? " · וי " + body.vav_yud_class : "") +
+            flag,
+          body.flagged ? "warn" : ""
+        );
+      } catch (err) {
+        setLexStatus(String(err), "err");
+      }
+    });
+  }
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      postLexicon("/v1/lexicon/update", "Saving…", "Saved");
+    });
+  }
+  if (addBtn) {
+    addBtn.addEventListener("click", () => {
+      postLexicon("/v1/lexicon/add", "Adding…", "Added");
+    });
+  }
+}

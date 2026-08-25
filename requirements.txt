@@ -24,7 +24,8 @@ pydantic>=2               # api/dto.py — every request/response model
 
 # --- engine + runtimes -----------------------------------------------------
 # snapshot_download: the ~1.23 GB engine and the ~282 MB blue-yi bundle.
-huggingface_hub>=0.25
+# [oauth] pulls authlib + itsdangerous for attach_huggingface_oauth (ABE101 editor).
+huggingface_hub[oauth]>=0.25
 # Tensor plumbing for the runtime, plus audio.pcm16_wav's vectorised packing.
 numpy>=1.26
 # The v5 pointing model and blue-yi's four graphs.

@@ -6,6 +6,8 @@ colorTo: purple
 sdk: docker
 app_file: app.py
 pinned: false
+hf_oauth: true
+hf_oauth_expiration_minutes: 480
 models:
   - notmax123/phonikud-yi-engine
   - notmax123/blue-yi
@@ -116,6 +118,11 @@ request/response fields and working curl commands: [`docs/API.md`](docs/API.md).
 | `POST /v1/audio/diacritize` | text → nikud |
 | `POST /v1/audio/phonemize` | text → nikud + IPA + per-token table |
 | `POST /v1/audio/speech` | WAV, or a framed stream |
+| `GET /v1/lexicon/me` | who is signed in; whether they may edit |
+| `GET /v1/lexicon/lookup` | look up a type (ABE101 only) |
+| `POST /v1/lexicon/update` | write a gold / וי-class reading (ABE101 only) |
+| `POST /v1/lexicon/add` | insert a new type (ABE101 only; fails if it already exists) |
+| `GET /v1/lexicon/edits` | persisted ABE101 edits (ABE101 only) |
 
 Speech, on the default runtime (44.1 kHz):
 
@@ -270,6 +277,19 @@ which would let a tier-4 model guess re-decide readings the gold lexicon had alr
 - **Cold start is slow.** The first request after a restart waits on the engine and acoustic
   downloads; `GET /health` reports `engine_loaded`, `runtime_loaded` and any warm-up error, so
   you can poll for readiness and tell warming from broken.
+
+## Lexicon editor (ABE101 only)
+
+וי is not a spelling rule. Default reading is `ɔj`; `oʊ` is a closed û-class
+exception list (Weinreich 54: הויז, אויף, אויס־, …). Hugging Face user
+[ABE101](https://huggingface.co/ABE101) can search a type and correct its gold
+IPA and/or וי class. Everyone else uses the Space as before; write APIs return
+401/403. Sign in with Hugging Face (the Space README sets `hf_oauth: true`).
+
+To change the allowed editor, set Space variable `LEXICON_EDITOR_USER`
+(default `ABE101`). To persist edits across restarts, set Space secret
+`HF_TOKEN` (write) and optionally `LEXICON_EDITS_DATASET`
+(default `notmax123/phonikud-yi-lexicon-edits`).
 
 ## Credits
 

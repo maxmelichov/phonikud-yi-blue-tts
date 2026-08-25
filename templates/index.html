@@ -22,10 +22,19 @@
   <body>
     <div class="container">
       <header class="header">
-        <h1><i class="fas fa-microphone-alt"></i> Yiddish Phonikud TTS</h1>
-        <p class="header-subtitle">
-          Hasidic (Unterland&nbsp;/&nbsp;Central) Yiddish &mdash; text to speech.
-        </p>
+        <div class="header-row">
+          <div>
+            <h1><i class="fas fa-microphone-alt"></i> Yiddish Phonikud TTS</h1>
+            <p class="header-subtitle">
+              Hasidic (Unterland&nbsp;/&nbsp;Central) Yiddish &mdash; text to speech.
+            </p>
+          </div>
+          <div class="auth-bar" id="auth-bar">
+            <a class="auth-link" id="auth-login" href="/oauth/huggingface/login" target="_blank" rel="noopener">Sign in with HF</a>
+            <span class="auth-who" id="auth-who" hidden></span>
+            <a class="auth-link" id="auth-logout" href="/oauth/huggingface/logout" hidden>Sign out</a>
+          </div>
+        </div>
       </header>
 
       <main class="main-card">
@@ -299,6 +308,50 @@
           </div>
         </section>
       </main>
+
+      <section class="lexicon-editor main-card" id="lexicon-editor" hidden>
+        <h2 class="section-title"><i class="fas fa-pen-to-square"></i> Lexicon editor</h2>
+        <p class="muted small" id="lexicon-editor-help">
+          Restricted to Hugging Face user ABE101. Look up, then <strong>Save reading</strong> to
+          overwrite an existing type. <strong>Add word</strong> inserts a type that is not already
+          in gold / overlay — if it exists, add fails (use Save reading; it will not silently
+          clobber). New וי words default to ɔj unless you explicitly set oʊ (û-class 54 only).
+        </p>
+        <div class="control-grid">
+          <div class="control">
+            <label class="control-label" for="lex-word">Word</label>
+            <input id="lex-word" class="control-input rtl" dir="rtl" maxlength="40" autocomplete="off" />
+          </div>
+          <div class="control">
+            <label class="control-label" for="lex-ipa">IPA</label>
+            <input id="lex-ipa" class="control-input mono" dir="ltr" maxlength="80" autocomplete="off" />
+          </div>
+          <div class="control control-narrow">
+            <label class="control-label" for="lex-class">וי class</label>
+            <select id="lex-class" class="control-input">
+              <option value="">leave IPA as typed (new וי → ɔj)</option>
+              <option value="ɔj">ɔj (default / 42-44 / ḥolem)</option>
+              <option value="oʊ">oʊ (û-class 54 only — must set explicitly)</option>
+            </select>
+          </div>
+        </div>
+        <div class="control-grid">
+          <div class="control">
+            <label class="control-label" for="lex-variants">Variants (optional, | or comma)</label>
+            <input id="lex-variants" class="control-input mono" dir="ltr" maxlength="200" />
+          </div>
+          <div class="control">
+            <label class="control-label" for="lex-note">Note</label>
+            <input id="lex-note" class="control-input" maxlength="240" />
+          </div>
+        </div>
+        <p class="small" id="lex-status" role="status"></p>
+        <div class="action-row">
+          <button type="button" class="btn-generate" id="lex-lookup">Look up</button>
+          <button type="button" class="btn-generate" id="lex-save">Save reading</button>
+          <button type="button" class="btn-generate" id="lex-add">Add word</button>
+        </div>
+      </section>
 
       <footer class="footer">
         <a href="/docs" target="_blank" rel="noopener"><i class="fas fa-book"></i> API docs</a>
