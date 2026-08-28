@@ -27,10 +27,13 @@ DEFAULT_RUNTIME_ID = "blue_yi"
 ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
 # PINNED to a commit for the same reason blue-yi is (below): the engine decides
 # every phoneme the voice speaks, and tracking a branch means a cold cache can
-# fetch a new bundle unvetted. This is the v6 bundle: pointing model retrained
-# on chain-attested supervision (paired phonetic eval vs v5: +25/-10 on the
-# held-out test set), model_pointed_lk at 7,649 types.
-ENGINE_REVISION = "89e9839abebfeb2d374688c8d5e86d2168297acc"
+# fetch a new bundle unvetted. Still the v6 pointing model -- v7 was trained
+# and measured WORSE on the phonetic eval (vs_gold_rule 73.13 -> 72.76), so it
+# was not shipped. This revision adds the vowel-rule work on top: וי defaults
+# to ɔj (Weinreich 44) with oʊ kept as a closed û-class list so אויך is not
+# collapsed with הויז, plus ברויכ־, the פויל/פוילן homograph, and the
+# די + bare טויב context read. model_pointed_lk at 7,633 types.
+ENGINE_REVISION = "faf402b770cee967a0c3ca2b55609565a4c73bc5"
 
 # The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries
