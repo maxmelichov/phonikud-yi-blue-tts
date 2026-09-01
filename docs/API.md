@@ -467,6 +467,34 @@ logout URLs are `/oauth/huggingface/login` and `/oauth/huggingface/logout`.
 Look up one type in the live engine tables. **ABE101 only** — unauthenticated callers get
 `401 forbidden`, any other signed-in user `403 forbidden`.
 
+### `GET /v1/lexicon/browse`
+
+Page through every type the engine holds — the editor's table view. **ABE101 only.**
+
+One row per type, attributed to the highest-authority table that carries it, so `source`
+doubles as a confidence read and `tier` is literally the routing order of spec v3 §3:
+
+| `tier` | `source` | Meaning |
+| --- | --- | --- |
+| 1 | `gold`, `multiword`, `abbrev` | Native-verified verdicts. |
+| 2 | `homograph`, `audio` | Decided from corpus audio. |
+| 3 | `sefaria` | Taken from a pointed source. |
+| 4 | `model` | The pointing model's own guess — the weakest reading, and the one most worth a native verdict. |
+
+Query parameters:
+
+| Name | Default | Notes |
+| --- | --- | --- |
+| `q` | `""` | Matches the Hebrew spelling, its pointed form, or the IPA. Results are re-ranked so an exact word beats a longer compound that merely contains it; without `q` the order is corpus frequency. |
+| `source` | `""` | One of the `slug` values in the response's `sources` list. |
+| `only` | `""` | `vav_yud` (contains וי), `flagged` (וי class held uncertain), `edited` (changed on this Space), `variants` (more than one accepted reading). |
+| `offset` / `limit` | `0` / `50` | `limit` is capped at 200. |
+
+The response carries `total`, `matched`, `offset`, `limit`, `rows`, and `sources` (the picker's
+options). Each row has `word`, `key`, `ipa`, `variants`, `pointed`, `source`, `source_label`,
+`tier`, `freq`, `note`, `layer`, `vav_yud_class`, `has_vav_yud`, `flagged`, `flag_reason`
+and `edited` — the same fields `POST /v1/lexicon/update` accepts, so a row can be edited in place.
+
 ### `POST /v1/lexicon/update`
 
 Write a gold-tier reading (and optional וי class `oʊ` / `ɔj`) for one type. **ABE101 only**.

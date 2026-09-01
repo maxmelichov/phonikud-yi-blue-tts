@@ -62,6 +62,12 @@ _edits: list[dict[str, Any]] = []
 _applied = False
 _persist_note = "not yet applied"
 
+# The browse index is built from the engine's own tables, which only ever change
+# when an edit is applied on top of them. _edits_version is bumped on every
+# apply so a cached index knows to rebuild; nothing else invalidates it.
+_edits_version = 0
+_browse_cache: tuple[int, list[dict[str, Any]]] | None = None
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -346,8 +352,9 @@ def apply_edit_row(g2p: ModuleType, row: dict[str, Any]) -> None:
 
 def apply_to_engine(g2p: ModuleType) -> None:
     """Idempotent overlay: seed policy, then persisted ABE101 edits."""
-    global _applied, _persist_note
+    global _applied, _persist_note, _edits_version
     with _LOCK:
+        _edits_version += 1
         seed_log = apply_seed(g2p)
         loaded, source = _load_persisted()
         _edits[:] = loaded
@@ -442,6 +449,175 @@ def _save_dataset(rows: list[dict[str, Any]]) -> str | None:
         return None
 
 
+# --- browsing what is already there ------------------------------------------
+#
+# The editor used to start from an empty word box: you had to already know the
+# spelling of the thing you wanted to fix. Everything below exists so it can
+# start from the tables instead. Order here IS the authority chain (spec v3 §3):
+# gold outranks audio evidence, which outranks Sefaria pointing, which outranks
+# the model's own guesses -- so a word listed under `model` is the engine's
+# weakest reading and the most worth a native verdict.
+_SOURCES: tuple[tuple[str, str, str, int], ...] = (
+    ("GOLD_LEXICON", "gold", "Native-verified gold", 1),
+    ("_MULTIWORD", "multiword", "Multiword phrase", 1),
+    ("_ABBREVIATIONS", "abbrev", "Abbreviation", 1),
+    ("_HOMOGRAPH_LK", "homograph", "Homograph (audio-decided)", 2),
+    ("_AUDIO_ENDORSED", "audio", "Corpus audio endorsed", 2),
+    ("_AUDIO_PE", "audio", "Corpus audio (פ/ף)", 2),
+    ("_AUDIO_VOWEL", "audio", "Corpus audio (vowel slot)", 2),
+    ("_SEFARIA_POINTED", "sefaria", "Sefaria pointing", 3),
+    ("_MODEL_POINTED", "model", "Model guess (weakest)", 4),
+)
+_SOURCE_LABELS: dict[str, str] = {slug: label for _, slug, label, _ in _SOURCES}
+_SOURCE_TIERS: dict[str, int] = {slug: tier for _, slug, _, tier in _SOURCES}
+
+BROWSE_SOURCES: list[dict[str, Any]] = [
+    {"slug": slug, "label": label, "tier": tier}
+    for slug, label, tier in sorted(
+        {(s, _SOURCE_LABELS[s], _SOURCE_TIERS[s]) for _, s, _, _ in _SOURCES},
+        key=lambda row: (row[2], row[0]),
+    )
+]
+
+
+def _row_from_entry(g2p: ModuleType, key: str, entry: Any, attr: str,
+                    slug: str, tier: int) -> dict[str, Any]:
+    ipa = _ipa_of(entry)
+    word = key
+    variants: list[str] = []
+    layer = ""
+    note = ""
+    pointed = ""
+    freq = 0
+    if isinstance(entry, dict):
+        word = str(entry.get("word") or key)
+        variants = [str(v) for v in (entry.get("variants") or []) if v]
+        layer = str(entry.get("layer") or "")
+        note = str(entry.get("note") or entry.get("why") or entry.get("reason") or "")
+        pointed = str(entry.get("pointed") or "")
+        try:
+            freq = int(entry.get("freq") or 0)
+        except (TypeError, ValueError):
+            freq = 0
+    elif isinstance(entry, tuple) and len(entry) > 1 and isinstance(entry[1], list):
+        variants = [str(v) for v in entry[1] if v]
+    if ipa and ipa not in variants:
+        variants = [ipa, *variants]
+    return {
+        "word": word,
+        "key": key,
+        "table": attr,
+        "source": slug,
+        "source_label": _SOURCE_LABELS[slug],
+        "tier": tier,
+        "ipa": ipa,
+        "variants": variants,
+        "layer": layer,
+        "note": note,
+        "pointed": pointed,
+        "freq": freq,
+        "vav_yud_class": vav_yud.classify_ipa(ipa),
+        "has_vav_yud": vav_yud.has_vav_yud(word),
+        "flagged": word in vav_yud.FLAGGED_UNCERTAIN,
+        "flag_reason": vav_yud.FLAGGED_UNCERTAIN.get(word, ""),
+    }
+
+
+def _build_index(g2p: ModuleType) -> list[dict[str, Any]]:
+    """One row per type, highest-authority table wins (first one that has it)."""
+    seen: set[str] = set()
+    rows: list[dict[str, Any]] = []
+    for attr, slug, _label, tier in _SOURCES:
+        table = getattr(g2p, attr, None)
+        if not isinstance(table, dict):
+            continue
+        for key, entry in table.items():
+            if not isinstance(key, str) or key in seen:
+                continue
+            seen.add(key)
+            rows.append(_row_from_entry(g2p, key, entry, attr, slug, tier))
+    rows.sort(key=lambda r: (-r["freq"], r["word"]))
+    return rows
+
+
+def _index(g2p: ModuleType) -> list[dict[str, Any]]:
+    global _browse_cache
+    cached = _browse_cache
+    if cached is not None and cached[0] == _edits_version:
+        return cached[1]
+    rows = _build_index(g2p)
+    _browse_cache = (_edits_version, rows)
+    return rows
+
+
+def browse(g2p: ModuleType, *, q: str = "", source: str = "",
+           only: str = "", offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    """Page through the live lexicon with the same fields the editor writes."""
+    limit = max(1, min(int(limit or 50), 200))
+    offset = max(0, int(offset or 0))
+    rows = _index(g2p)
+
+    edited = {row["word"] for row in edits_snapshot()}
+    query = (q or "").strip()
+    hebrew_q = ""
+    if query:
+        try:
+            hebrew_q = g2p.lexicon_key(query)
+        except Exception:  # noqa: BLE001 -- a partial word may not normalize
+            hebrew_q = ""
+    lower_q = query.lower()
+
+    def matches(row: dict[str, Any]) -> bool:
+        if source and row["source"] != source:
+            return False
+        if only == "vav_yud" and not row["has_vav_yud"]:
+            return False
+        if only == "flagged" and not row["flagged"]:
+            return False
+        if only == "edited" and row["word"] not in edited:
+            return False
+        if only == "variants" and len(row["variants"]) < 2:
+            return False
+        if query:
+            if hebrew_q and hebrew_q in row["key"]:
+                return True
+            if query in row["word"] or query in row["pointed"]:
+                return True
+            return lower_q in row["ipa"].lower()
+        return True
+
+    hits = [row for row in rows if matches(row)]
+    if query:
+        # Freq order is right for browsing but wrong for searching: typing a whole
+        # word must put that word on top, not the longest compound that contains it.
+        def rank(row: dict[str, Any]) -> tuple[int, int, str]:
+            key, word = row["key"], row["word"]
+            if hebrew_q and key == hebrew_q:
+                tier = 0
+            elif query == word or query == row["ipa"]:
+                tier = 0
+            elif (hebrew_q and key.startswith(hebrew_q)) or word.startswith(query) \
+                    or row["ipa"].lower().startswith(lower_q):
+                tier = 1
+            else:
+                tier = 2
+            return (tier, -row["freq"], word)
+
+        hits.sort(key=rank)
+    page = [
+        {**row, "edited": row["word"] in edited}
+        for row in hits[offset:offset + limit]
+    ]
+    return {
+        "total": len(rows),
+        "matched": len(hits),
+        "offset": offset,
+        "limit": limit,
+        "rows": page,
+        "sources": BROWSE_SOURCES,
+    }
+
+
 def save_edit(g2p: ModuleType, *, word: str, ipa_primary: str,
               variants: Any = None, layer: str = "G", note: str = "",
               vav_yud_class: str | None = None, username: str,
@@ -512,6 +688,8 @@ def save_edit(g2p: ModuleType, *, word: str, ipa_primary: str,
         _edits[:] = [item for item in _edits if item.get("word") != surface]
         _edits.append(row)
         apply_edit_row(g2p, row)
+        global _edits_version
+        _edits_version += 1
         local = _edits_path()
         local.parent.mkdir(parents=True, exist_ok=True)
         local.write_text(_dump_jsonl(_edits), encoding="utf-8")

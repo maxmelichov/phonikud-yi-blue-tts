@@ -408,16 +408,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function initLexiconEditor() {
   const editor = el("lexicon-editor");
+  if (!editor) return;
+
   const login = el("auth-login");
   const logout = el("auth-logout");
   const who = el("auth-who");
   const status = el("lex-status");
-  if (!editor) return;
+  const tbody = el("lex-tbody");
+  const panel = el("lex-edit");
+
+  // Browse state. `word` is null while adding, which is the only difference
+  // between the two modes: /update takes whatever word is in the box, /add
+  // refuses a word that already exists.
+  const state = { q: "", source: "", only: "", offset: 0, limit: 50, matched: 0, editing: null };
+  let searchTimer = null;
 
   function setLexStatus(text, kind) {
     if (!status) return;
     status.textContent = text || "";
-    status.className = "small" + (kind ? " status-" + kind : "");
+    status.className = "small lex-status" + (kind ? " status-" + kind : "");
   }
 
   fetch("/v1/lexicon/me", { credentials: "same-origin" })
@@ -435,97 +444,335 @@ function initLexiconEditor() {
       }
       if (me.can_edit) {
         editor.hidden = false;
+        load();
       }
     })
     .catch(() => {
       /* public path: TTS still works without OAuth */
     });
 
-  const lookupBtn = el("lex-lookup");
-  const saveBtn = el("lex-save");
-  const addBtn = el("lex-add");
+  // ---- browsing -------------------------------------------------------------
+
+  function fillSources(sources) {
+    const select = el("lex-source");
+    if (!select || select.dataset.filled) return;
+    (sources || []).forEach((s) => {
+      const opt = document.createElement("option");
+      opt.value = s.slug;
+      opt.textContent = s.label;
+      select.appendChild(opt);
+    });
+    select.dataset.filled = "1";
+  }
+
+  function renderRows(rows) {
+    if (!tbody) return;
+    tbody.textContent = "";
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.className = "lex-empty muted";
+      td.textContent = state.q
+        ? "No word matches “" + state.q + "”. Use New word to add it."
+        : "Nothing matches these filters.";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      tr.className = "lex-row" + (row.edited ? " lex-row-edited" : "");
+      tr.tabIndex = 0;
+      tr.setAttribute("role", "button");
+      tr.setAttribute("aria-label", "Edit " + row.word);
+
+      const word = document.createElement("td");
+      word.className = "rtl lex-cell-word";
+      word.textContent = row.word;
+      if (row.pointed) {
+        const pointed = document.createElement("span");
+        pointed.className = "lex-pointed rtl";
+        pointed.textContent = row.pointed;
+        word.appendChild(pointed);
+      }
+      tr.appendChild(word);
+
+      const ipa = document.createElement("td");
+      ipa.className = "mono lex-cell-ipa";
+      ipa.textContent = row.ipa || "—";
+      tr.appendChild(ipa);
+
+      const alt = document.createElement("td");
+      alt.className = "mono muted small";
+      alt.textContent = (row.variants || []).filter((v) => v !== row.ipa).join("  ·  ") || "—";
+      tr.appendChild(alt);
+
+      const src = document.createElement("td");
+      const chip = document.createElement("span");
+      chip.className = "lex-chip lex-tier-" + row.tier;
+      chip.textContent = row.source;
+      chip.title = row.source_label;
+      src.appendChild(chip);
+      if (row.edited) {
+        const badge = document.createElement("span");
+        badge.className = "lex-chip lex-chip-edited";
+        badge.textContent = "changed";
+        src.appendChild(badge);
+      }
+      if (row.flagged) {
+        const badge = document.createElement("span");
+        badge.className = "lex-chip lex-chip-flagged";
+        badge.textContent = "uncertain";
+        badge.title = row.flag_reason || "וי class held uncertain";
+        src.appendChild(badge);
+      }
+      tr.appendChild(src);
+
+      const freq = document.createElement("td");
+      freq.className = "lex-num muted";
+      freq.textContent = row.freq ? String(row.freq) : "—";
+      tr.appendChild(freq);
+
+      const action = document.createElement("td");
+      action.className = "lex-cell-action";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "lex-edit-btn";
+      btn.textContent = "Edit";
+      action.appendChild(btn);
+      tr.appendChild(action);
+
+      const open = () => openEdit(row);
+      tr.addEventListener("click", open);
+      tr.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderCount(body) {
+    const count = el("lex-count");
+    const range = el("lex-range");
+    const filtered = body.matched !== body.total;
+    if (count) {
+      count.textContent = filtered
+        ? body.matched.toLocaleString() + " of " + body.total.toLocaleString() + " words match"
+        : body.total.toLocaleString() + " words in the lexicon";
+    }
+    if (range) {
+      const first = body.matched ? body.offset + 1 : 0;
+      const last = Math.min(body.offset + body.limit, body.matched);
+      range.textContent = first + "–" + last;
+    }
+    const prev = el("lex-prev");
+    const next = el("lex-next");
+    if (prev) prev.disabled = body.offset <= 0;
+    if (next) next.disabled = body.offset + body.limit >= body.matched;
+  }
+
+  async function load() {
+    const params = new URLSearchParams({
+      q: state.q,
+      source: state.source,
+      only: state.only,
+      offset: String(state.offset),
+      limit: String(state.limit),
+    });
+    try {
+      const response = await fetch("/v1/lexicon/browse?" + params.toString(), {
+        credentials: "same-origin",
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        const count = el("lex-count");
+        if (count) count.textContent = (body.error && body.error.message) || "Could not load the lexicon.";
+        return;
+      }
+      state.matched = body.matched;
+      fillSources(body.sources);
+      renderRows(body.rows);
+      renderCount(body);
+    } catch (err) {
+      const count = el("lex-count");
+      if (count) count.textContent = String(err);
+    }
+  }
+
+  function refilter() {
+    state.offset = 0;
+    load();
+  }
+
+  const q = el("lex-q");
+  if (q) {
+    q.addEventListener("input", () => {
+      state.q = q.value.trim();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(refilter, 200);
+    });
+  }
+  const sourceSel = el("lex-source");
+  if (sourceSel) {
+    sourceSel.addEventListener("change", () => {
+      state.source = sourceSel.value;
+      refilter();
+    });
+  }
+  const onlySel = el("lex-only");
+  if (onlySel) {
+    onlySel.addEventListener("change", () => {
+      state.only = onlySel.value;
+      refilter();
+    });
+  }
+  const prevBtn = el("lex-prev");
+  if (prevBtn) {
+    prevBtn.addEventListener("click", () => {
+      state.offset = Math.max(0, state.offset - state.limit);
+      load();
+    });
+  }
+  const nextBtn = el("lex-next");
+  if (nextBtn) {
+    nextBtn.addEventListener("click", () => {
+      if (state.offset + state.limit < state.matched) {
+        state.offset += state.limit;
+        load();
+      }
+    });
+  }
+
+  // ---- editing --------------------------------------------------------------
+
+  function setValue(id, value) {
+    const node = el(id);
+    if (node) node.value = value || "";
+  }
+
+  function openEdit(row) {
+    state.editing = row;
+    if (!panel) return;
+    panel.hidden = false;
+    const wordField = el("lex-word-field");
+    const vyField = el("lex-vy-field");
+    if (wordField) wordField.hidden = true;
+    if (vyField) vyField.hidden = !row.has_vav_yud;
+
+    const mode = el("lex-edit-mode");
+    const wordOut = el("lex-edit-word");
+    const meta = el("lex-edit-meta");
+    if (mode) mode.textContent = "Editing";
+    if (wordOut) wordOut.textContent = row.word;
+    if (meta) {
+      const bits = [row.source_label];
+      if (row.freq) bits.push(row.freq.toLocaleString() + " uses in the corpus");
+      if (row.flagged) bits.push("וי class held uncertain — " + (row.flag_reason || ""));
+      meta.textContent = bits.join(" · ");
+    }
+
+    setValue("lex-word", row.word);
+    setValue("lex-ipa", row.ipa);
+    setValue("lex-variants", (row.variants || []).filter((v) => v !== row.ipa).join(" | "));
+    setValue("lex-note", row.note && row.note.length <= 240 ? row.note : "");
+    setValue("lex-class", row.has_vav_yud && row.vav_yud_class ? row.vav_yud_class : "");
+    setLexStatus(
+      row.tier >= 4
+        ? "This reading is the model's own guess. A verdict here overrides it everywhere."
+        : "",
+      row.tier >= 4 ? "warn" : ""
+    );
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const ipaInput = el("lex-ipa");
+    if (ipaInput) ipaInput.focus();
+  }
+
+  function openNew() {
+    state.editing = null;
+    if (!panel) return;
+    panel.hidden = false;
+    const wordField = el("lex-word-field");
+    const vyField = el("lex-vy-field");
+    if (wordField) wordField.hidden = false;
+    if (vyField) vyField.hidden = false;
+
+    const mode = el("lex-edit-mode");
+    const wordOut = el("lex-edit-word");
+    const meta = el("lex-edit-meta");
+    if (mode) mode.textContent = "New word";
+    if (wordOut) wordOut.textContent = "";
+    if (meta) meta.textContent = "Adding a word the engine does not know yet.";
+
+    ["lex-word", "lex-ipa", "lex-variants", "lex-note", "lex-class"].forEach((id) => setValue(id, ""));
+    setLexStatus("A new וי word reads ɔj unless you pick oʊ.", "");
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const wordInput = el("lex-word");
+    if (wordInput) wordInput.focus();
+  }
+
+  function closeEdit() {
+    state.editing = null;
+    if (panel) panel.hidden = true;
+    setLexStatus("");
+  }
+
+  const newBtn = el("lex-new");
+  if (newBtn) newBtn.addEventListener("click", openNew);
+  [el("lex-cancel"), el("lex-cancel-2")].forEach((btn) => {
+    if (btn) btn.addEventListener("click", closeEdit);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && panel && !panel.hidden) closeEdit();
+  });
 
   function lexPayload() {
-    const word = (el("lex-word") && el("lex-word").value) || "";
-    const ipa = (el("lex-ipa") && el("lex-ipa").value) || "";
     const variantsRaw = (el("lex-variants") && el("lex-variants").value) || "";
-    const note = (el("lex-note") && el("lex-note").value) || "";
     const klass = (el("lex-class") && el("lex-class").value) || "";
-    const variants = variantsRaw
-      ? variantsRaw.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
-      : null;
     return {
-      word: word,
-      ipa_primary: ipa,
-      variants: variants,
-      note: note,
+      word: (el("lex-word") && el("lex-word").value) || "",
+      ipa_primary: (el("lex-ipa") && el("lex-ipa").value) || "",
+      variants: variantsRaw
+        ? variantsRaw.split(/[|,]/).map((s) => s.trim()).filter(Boolean)
+        : null,
+      note: (el("lex-note") && el("lex-note").value) || "",
       vav_yud_class: klass || null,
     };
   }
 
-  async function postLexicon(path, busyLabel, okVerb) {
-    setLexStatus(busyLabel);
-    try {
-      const response = await fetch(path, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(lexPayload()),
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        setLexStatus((body.error && body.error.message) || "request failed", "err");
-        return;
-      }
-      setLexStatus(
-        okVerb + " " + body.word + " → " + body.ipa_primary + " (" + (body.persisted || "") + ")",
-        "ok"
-      );
-    } catch (err) {
-      setLexStatus(String(err), "err");
-    }
-  }
-
-  if (lookupBtn) {
-    lookupBtn.addEventListener("click", async () => {
-      const word = (el("lex-word") && el("lex-word").value) || "";
-      setLexStatus("Looking up…");
+  const saveBtn = el("lex-save");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", async () => {
+      const adding = state.editing === null;
+      const path = adding ? "/v1/lexicon/add" : "/v1/lexicon/update";
+      setLexStatus(adding ? "Adding…" : "Saving…");
+      saveBtn.disabled = true;
       try {
-        const response = await fetch(
-          "/v1/lexicon/lookup?word=" + encodeURIComponent(word),
-          { credentials: "same-origin" }
-        );
+        const response = await fetch(path, {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(lexPayload()),
+        });
         const body = await response.json();
         if (!response.ok) {
-          setLexStatus((body.error && body.error.message) || "lookup failed", "err");
+          setLexStatus((body.error && body.error.message) || "Could not save.", "err");
           return;
         }
-        if (el("lex-ipa")) el("lex-ipa").value = body.ipa_primary || "";
-        if (el("lex-variants")) el("lex-variants").value = (body.variants || []).join(" | ");
-        if (el("lex-note")) el("lex-note").value = body.note || "";
-        if (el("lex-class") && body.vav_yud_class) el("lex-class").value = body.vav_yud_class;
-        const flag = body.flagged ? " FLAG: " + body.flag_reason : "";
         setLexStatus(
-          (body.found
-            ? "Found in " + body.table + " — use Save reading to overwrite"
-            : "Not in lexicon — use Add word") +
-            (body.vav_yud_class ? " · וי " + body.vav_yud_class : "") +
-            flag,
-          body.flagged ? "warn" : ""
+          (adding ? "Added " : "Saved ") + body.word + " → " + body.ipa_primary +
+            ". The voice uses it from the next request on.",
+          "ok"
         );
+        await load();
       } catch (err) {
         setLexStatus(String(err), "err");
+      } finally {
+        saveBtn.disabled = false;
       }
-    });
-  }
-  if (saveBtn) {
-    saveBtn.addEventListener("click", () => {
-      postLexicon("/v1/lexicon/update", "Saving…", "Saved");
-    });
-  }
-  if (addBtn) {
-    addBtn.addEventListener("click", () => {
-      postLexicon("/v1/lexicon/add", "Adding…", "Added");
     });
   }
 }

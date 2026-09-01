@@ -310,46 +310,123 @@
       </main>
 
       <section class="lexicon-editor main-card" id="lexicon-editor" hidden>
-        <h2 class="section-title"><i class="fas fa-pen-to-square"></i> Lexicon editor</h2>
-        <p class="muted small" id="lexicon-editor-help">
-          Restricted to Hugging Face user ABE101. Look up, then <strong>Save reading</strong> to
-          overwrite an existing type. <strong>Add word</strong> inserts a type that is not already
-          in gold / overlay — if it exists, add fails (use Save reading; it will not silently
-          clobber). New וי words default to ɔj unless you explicitly set oʊ (û-class 54 only).
+        <h2 class="section-title"><i class="fas fa-book-open"></i> Lexicon</h2>
+        <p class="muted small">
+          Every word the engine already knows, strongest reading first. Search it,
+          then pick a row to correct what the voice says. Editing is limited to the
+          Hugging Face account named in <code>LEXICON_EDITOR_USER</code>.
         </p>
-        <div class="control-grid">
-          <div class="control">
-            <label class="control-label" for="lex-word">Word</label>
-            <input id="lex-word" class="control-input rtl" dir="rtl" maxlength="40" autocomplete="off" />
-          </div>
-          <div class="control">
-            <label class="control-label" for="lex-ipa">IPA</label>
-            <input id="lex-ipa" class="control-input mono" dir="ltr" maxlength="80" autocomplete="off" />
+
+        <div class="lex-legend">
+          <span class="lex-legend-label">Where a reading comes from</span>
+          <span class="lex-chip lex-tier-1">gold</span> native-verified
+          <span class="lex-chip lex-tier-2">audio</span> heard in the corpus
+          <span class="lex-chip lex-tier-3">sefaria</span> from pointing
+          <span class="lex-chip lex-tier-4">model</span> the model&rsquo;s own guess &mdash; weakest, most worth fixing
+        </div>
+
+        <div class="lex-toolbar">
+          <div class="control lex-search">
+            <label class="control-label" for="lex-q">Search a word or its IPA</label>
+            <input id="lex-q" class="control-input rtl" dir="auto" maxlength="40"
+                   autocomplete="off" placeholder="&#1496;&#1493;&#1497;&#1489; or tɔjb" />
           </div>
           <div class="control control-narrow">
-            <label class="control-label" for="lex-class">וי class</label>
-            <select id="lex-class" class="control-input">
-              <option value="">leave IPA as typed (new וי → ɔj)</option>
-              <option value="ɔj">ɔj (default / 42-44 / ḥolem)</option>
-              <option value="oʊ">oʊ (û-class 54 only — must set explicitly)</option>
+            <label class="control-label" for="lex-source">Source</label>
+            <select id="lex-source" class="control-input">
+              <option value="">All sources</option>
             </select>
           </div>
-        </div>
-        <div class="control-grid">
-          <div class="control">
-            <label class="control-label" for="lex-variants">Variants (optional, | or comma)</label>
-            <input id="lex-variants" class="control-input mono" dir="ltr" maxlength="200" />
+          <div class="control control-narrow">
+            <label class="control-label" for="lex-only">Show</label>
+            <select id="lex-only" class="control-input">
+              <option value="">Everything</option>
+              <option value="edited">Changed here</option>
+              <option value="variants">More than one reading</option>
+              <option value="vav_yud">Contains &#1493;&#1497;</option>
+              <option value="flagged">&#1493;&#1497; held uncertain</option>
+            </select>
           </div>
-          <div class="control">
-            <label class="control-label" for="lex-note">Note</label>
-            <input id="lex-note" class="control-input" maxlength="240" />
+          <button type="button" class="btn-generate lex-new-btn" id="lex-new">
+            <i class="fas fa-plus"></i> New word
+          </button>
+        </div>
+
+        <div class="lex-edit" id="lex-edit" hidden>
+          <div class="lex-edit-head">
+            <div>
+              <span class="lex-edit-mode" id="lex-edit-mode">Editing</span>
+              <span class="lex-edit-word rtl" id="lex-edit-word"></span>
+              <span class="lex-edit-meta muted small" id="lex-edit-meta"></span>
+            </div>
+            <button type="button" class="lex-close" id="lex-cancel" aria-label="Close editor">
+              <i class="fas fa-xmark"></i>
+            </button>
+          </div>
+
+          <div class="control-grid">
+            <div class="control lex-word-field" id="lex-word-field" hidden>
+              <label class="control-label" for="lex-word">Word</label>
+              <input id="lex-word" class="control-input rtl" dir="rtl" maxlength="40" autocomplete="off" />
+            </div>
+            <div class="control">
+              <label class="control-label" for="lex-ipa">How it should sound (IPA)</label>
+              <input id="lex-ipa" class="control-input mono" dir="ltr" maxlength="80" autocomplete="off" />
+              <p class="control-hint muted small">
+                Closed inventory only. <code>ˈ</code> goes immediately before the stressed vowel.
+              </p>
+            </div>
+            <div class="control control-narrow lex-vy-field" id="lex-vy-field" hidden>
+              <label class="control-label" for="lex-class">&#1493;&#1497; reads as</label>
+              <select id="lex-class" class="control-input">
+                <option value="">leave the IPA exactly as typed</option>
+                <option value="&#596;j">&#596;j &mdash; the default</option>
+                <option value="o&#650;">o&#650; &mdash; &#251;-class only (&#1492;&#1493;&#1497;&#1494;, &#1488;&#1512;&#1493;&#1497;&#1505;)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="control-grid">
+            <div class="control">
+              <label class="control-label" for="lex-variants">Other acceptable readings</label>
+              <input id="lex-variants" class="control-input mono" dir="ltr" maxlength="200"
+                     placeholder="separate with | or ," />
+            </div>
+            <div class="control">
+              <label class="control-label" for="lex-note">Why (kept with the edit)</label>
+              <input id="lex-note" class="control-input" maxlength="240" />
+            </div>
+          </div>
+
+          <p class="small lex-status" id="lex-status" role="status"></p>
+          <div class="action-row">
+            <button type="button" class="btn-generate" id="lex-save">Save reading</button>
+            <button type="button" class="btn-generate btn-quiet" id="lex-cancel-2">Cancel</button>
           </div>
         </div>
-        <p class="small" id="lex-status" role="status"></p>
-        <div class="action-row">
-          <button type="button" class="btn-generate" id="lex-lookup">Look up</button>
-          <button type="button" class="btn-generate" id="lex-save">Save reading</button>
-          <button type="button" class="btn-generate" id="lex-add">Add word</button>
+
+        <p class="lex-count muted small" id="lex-count" role="status">Loading the lexicon&hellip;</p>
+
+        <div class="table-scroll lex-table-wrap">
+          <table class="token-table lex-table">
+            <thead>
+              <tr>
+                <th scope="col">Word</th>
+                <th scope="col">Reads as</th>
+                <th scope="col">Also accepted</th>
+                <th scope="col">Source</th>
+                <th scope="col" class="lex-num">Uses</th>
+                <th scope="col"><span class="visually-hidden">Edit</span></th>
+              </tr>
+            </thead>
+            <tbody id="lex-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="lex-pager">
+          <button type="button" class="btn-generate btn-quiet" id="lex-prev">&larr; Previous</button>
+          <span class="muted small" id="lex-range"></span>
+          <button type="button" class="btn-generate btn-quiet" id="lex-next">Next &rarr;</button>
         </div>
       </section>
 

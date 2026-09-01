@@ -155,7 +155,8 @@ def test_create_app() -> None:
 
     paths = walk(app.routes)
     for need in ("/v1/lexicon/me", "/v1/lexicon/lookup", "/v1/lexicon/update",
-                 "/v1/lexicon/add", "/v1/lexicon/edits", "/", "/health"):
+                 "/v1/lexicon/add", "/v1/lexicon/edits", "/v1/lexicon/browse",
+                 "/", "/health"):
         check(need in paths, f"route {need}")
 
 
@@ -323,13 +324,105 @@ def test_http_add() -> None:
         auth.logged_in_username = orig_user  # type: ignore[assignment]
 
 
+def test_browse() -> None:
+    print("browse")
+    fake = _fake_g2p(gold={
+        _lexicon_key("הויז"): {"word": "הויז", "ipa_primary": "hoʊz",
+                               "variants": ["hoʊz"], "layer": "G", "freq": 40},
+        _lexicon_key("די"): {"word": "די", "ipa_primary": "də",
+                             "variants": ["də", "di"], "layer": "G", "freq": 4153},
+    })
+    # A weaker tier holding a word that CONTAINS the gold one, to pin the ranking.
+    fake._MODEL_POINTED[_lexicon_key("הויזבחור")] = {
+        "ipa": "hɔjjzbˈuxur", "pointed": "הוֹיזְבָחוּר", "why": "default-embedded"}
+    fake._SEFARIA_POINTED[_lexicon_key("כזית")] = {
+        "ipa": "kazˈajis", "pointed": "כַּזַּיִת", "variants": []}
+
+    page = lexicon_edits.browse(fake, limit=10)
+    check(page["total"] == 4, "browse counts every table", str(page["total"]))
+    check([r["word"] for r in page["rows"]][0] == "די",
+          "browse orders by corpus frequency")
+    check({r["source"] for r in page["rows"]} == {"gold", "model", "sefaria"},
+          "browse attributes each row to its table")
+    tiers = {r["source"]: r["tier"] for r in page["rows"]}
+    check(tiers["gold"] < tiers["sefaria"] < tiers["model"],
+          "browse tier follows the authority chain", str(tiers))
+
+    # Typing a whole word must surface that word, not the longer compound that
+    # merely contains it -- freq order alone gets this wrong.
+    hit = lexicon_edits.browse(fake, q="הויז")
+    check(hit["matched"] == 2, "browse search matches substrings", str(hit["matched"]))
+    check(hit["rows"][0]["word"] == "הויז", "browse ranks the exact word first",
+          hit["rows"][0]["word"])
+
+    check(lexicon_edits.browse(fake, q="hoʊz")["rows"][0]["word"] == "הויז",
+          "browse searches IPA as well as spelling")
+    check(lexicon_edits.browse(fake, source="gold")["matched"] == 2,
+          "browse filters by source")
+    check(lexicon_edits.browse(fake, only="vav_yud")["matched"] == 2,
+          "browse filters to וי words")
+    check(lexicon_edits.browse(fake, only="variants")["matched"] == 1,
+          "browse filters to multi-reading words")
+
+    paged = lexicon_edits.browse(fake, limit=1, offset=1)
+    check(len(paged["rows"]) == 1 and paged["offset"] == 1, "browse paginates")
+    check(lexicon_edits.browse(fake, limit=9999)["limit"] == 200,
+          "browse caps the page size")
+
+    def body() -> None:
+        lexicon_edits.save_edit(fake, word="הויז", ipa_primary="hoʊz",
+                                username="ABE101")
+        after = lexicon_edits.browse(fake, q="הויז")
+        edited = {r["word"] for r in after["rows"] if r["edited"]}
+        check(edited == {"הויז"}, "browse marks edited rows", str(edited))
+        check(lexicon_edits.browse(fake, only="edited")["matched"] == 1,
+              "browse filters to edited rows")
+
+    _with_temp_edits(body)
+
+
+def test_http_browse() -> None:
+    print("HTTP browse gate")
+    from app import create_app
+    from fastapi.testclient import TestClient
+
+    client = TestClient(create_app())
+    unsigned = client.get("/v1/lexicon/browse")
+    check(unsigned.status_code == 401, "unsigned browse 401", str(unsigned.status_code))
+
+    orig_user = auth.logged_in_username
+    orig_loaded = engine.is_loaded
+    orig_g2p = engine._g2p
+    try:
+        engine.is_loaded = lambda: True  # type: ignore[method-assign]
+        engine._g2p = _fake_g2p(gold={_lexicon_key("די"): {
+            "word": "די", "ipa_primary": "də", "variants": ["də"],
+            "layer": "G", "freq": 4153}})
+        auth.logged_in_username = lambda _req: "someoneelse"  # type: ignore[assignment]
+        check(client.get("/v1/lexicon/browse").status_code == 403,
+              "non-ABE101 browse 403")
+        auth.logged_in_username = lambda _req: "ABE101"  # type: ignore[assignment]
+        ok = client.get("/v1/lexicon/browse?limit=5")
+        check(ok.status_code == 200, "ABE101 browse 200", str(ok.status_code))
+        payload = ok.json()
+        check(payload["rows"][0]["word"] == "די", "ABE101 browse body")
+        check(any(s["slug"] == "gold" for s in payload["sources"]),
+              "browse ships the source list the picker needs")
+    finally:
+        auth.logged_in_username = orig_user  # type: ignore[assignment]
+        engine.is_loaded = orig_loaded  # type: ignore[method-assign]
+        engine._g2p = orig_g2p
+
+
 def main() -> None:
     test_vav_yud()
     test_validation()
     test_auth_gate()
     test_create_app()
     test_add_entry()
+    test_browse()
     test_http_add()
+    test_http_browse()
     print("ALL CHECKS PASSED")
 
 
