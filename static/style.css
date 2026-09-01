@@ -1121,6 +1121,96 @@ select.control-input {
   }
 }
 
+/* ---------- plain-language additions ---------- */
+
+.pane-hint {
+  margin: 0 0 10px;
+  max-width: 70ch;
+}
+
+.char-count {
+  margin: 4px 2px 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.char-count-max {
+  color: var(--err);
+  font-weight: 600;
+}
+
+.key-hint {
+  align-self: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.read-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.read-summary:empty {
+  display: none;
+}
+
+.chip-ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.chip-neutral {
+  background: var(--info-soft);
+  color: var(--text-muted);
+}
+
+.chip-err {
+  background: var(--err-soft);
+  color: var(--err);
+}
+
+#derivation-details > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+#derivation-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+#derivation-details > summary::before {
+  content: "\25B8";
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-faint);
+  transition: transform 0.15s ease;
+}
+
+#derivation-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #derivation-details > summary::before {
+    transition: none;
+  }
+}
+
+.token-table tr.row-low td {
+  background: var(--warn-soft);
+}
+
+.token-table tr.row-skipped td {
+  background: var(--err-soft);
+}
+
 /* After .btn-generate, so the quiet variant actually wins. */
 .btn-quiet {
   background: transparent;

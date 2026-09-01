@@ -221,8 +221,57 @@ function renderTokens(tokens) {
 
   block.style.display = "";
   if (count) {
-    count.textContent = rows.length === 1 ? "1 token" : rows.length + " tokens";
+    count.textContent = rows.length === 1 ? "1 word" : rows.length + " words";
   }
+  renderSummary(rows);
+}
+
+/* Plain-language verdict above the expert table: how much of the sentence the
+   engine actually KNEW versus guessed. The table opens itself only when there
+   is something worth looking at. */
+function renderSummary(rows) {
+  const summary = el("read-summary");
+  const details = el("derivation-details");
+  if (!summary) return;
+
+  const low = rows.filter((t) => (t.confidence || "").toUpperCase() === "LOW");
+  const skipped = rows.filter((t) => (t.route || "").toLowerCase() === "fallback");
+  const known = rows.filter((t) => (t.route || "").toLowerCase() === "lexicon").length;
+
+  summary.textContent = "";
+  const bits = [];
+  bits.push(chipText("chip-ok", known + " of " + rows.length + " words from the verified lexicon"));
+  const guessed = rows.length - known - skipped.length;
+  if (guessed > 0) {
+    bits.push(chipText("chip-neutral", guessed + " read by rule"));
+  }
+  if (low.length) {
+    bits.push(chipText("chip-warn", low.length + " uncertain — worth checking"));
+  }
+  if (skipped.length) {
+    bits.push(chipText("chip-err", skipped.length + " not spoken (numbers, foreign words…)"));
+  }
+  bits.forEach((chip) => summary.appendChild(chip));
+
+  if (details) details.open = low.length > 0 || skipped.length > 0;
+  // Uncertain rows get a highlight so the open table points at them.
+  const tbody = el("token-tbody");
+  if (tbody) {
+    Array.from(tbody.rows).forEach((tr, i) => {
+      const token = rows[i] || {};
+      const isLow = (token.confidence || "").toUpperCase() === "LOW";
+      const isSkipped = (token.route || "").toLowerCase() === "fallback";
+      tr.classList.toggle("row-low", isLow && !isSkipped);
+      tr.classList.toggle("row-skipped", isSkipped);
+    });
+  }
+}
+
+function chipText(kind, text) {
+  const span = document.createElement("span");
+  span.className = "chip " + kind;
+  span.textContent = text;
+  return span;
 }
 
 function renderUnsupported(unsupported) {
@@ -379,6 +428,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const input = el("text-input");
       if (!input) return;
       input.value = button.getAttribute("data-sample") || "";
+      input.dispatchEvent(new Event("input"));
       const tabButton = document.querySelector('[data-bs-toggle="tab"][data-mode="text"]');
       if (tabButton && window.bootstrap && window.bootstrap.Tab) {
         window.bootstrap.Tab.getOrCreateInstance(tabButton).show();
@@ -401,6 +451,20 @@ document.addEventListener("DOMContentLoaded", () => {
       pane.click();
     }
   });
+
+  // Live 0/4000 counter: the limit exists (dto.MAX_INPUT_CHARS) and hitting it
+  // silently is confusing — show the number turning red instead.
+  const textInput = el("text-input");
+  const textCount = el("text-count");
+  if (textInput && textCount) {
+    const update = () => {
+      const n = textInput.value.length;
+      textCount.textContent = n + " / 4000";
+      textCount.classList.toggle("char-count-max", n >= 4000);
+    };
+    textInput.addEventListener("input", update);
+    update();
+  }
 
   initControls();
   initLexiconEditor();

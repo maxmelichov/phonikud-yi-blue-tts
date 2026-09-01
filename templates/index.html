@@ -124,7 +124,7 @@
                 role="tab"
                 aria-selected="false"
               >
-                <i class="fas fa-language"></i> Nikud
+                <i class="fas fa-language"></i> With vowel points
               </button>
             </li>
             <li class="nav-item flex-fill" role="presentation">
@@ -137,7 +137,7 @@
                 role="tab"
                 aria-selected="false"
               >
-                <i class="fas fa-code"></i> Phonemes
+                <i class="fas fa-code"></i> Exact sounds (IPA)
               </button>
             </li>
           </ul>
@@ -148,6 +148,10 @@
           <div class="tab-pane fade show active" id="text-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-font"></i> Yiddish text</h2>
+              <p class="pane-hint muted small">
+                Write Yiddish the way you normally do &mdash; no vowel marks needed.
+                The engine works them out and reads it aloud.
+              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -159,11 +163,13 @@
                 dir="rtl"
                 placeholder="שרייבט אריין אידישן טעקסט אן נקודות…"
               ></textarea>
+              <p class="char-count muted small" id="text-count" aria-live="off">0 / 4000</p>
             </div>
             <div class="action-row">
               <button class="btn-generate" data-mode="text" id="text-btn" type="button">
-                <i class="fas fa-play"></i> Generate
+                <i class="fas fa-volume-high"></i> Read it aloud
               </button>
+              <span class="key-hint muted small" aria-hidden="true">Ctrl&#8202;+&#8202;Enter</span>
               <div id="text-status" class="status-indicator" style="display: none" role="status"></div>
             </div>
           </div>
@@ -172,6 +178,11 @@
           <div class="tab-pane fade" id="nikud-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-language"></i> Pointed Yiddish (nikud)</h2>
+              <p class="pane-hint muted small">
+                For when you want to control the reading yourself: your vowel marks are
+                honoured exactly, nothing is guessed. Generate on the Text tab first and
+                the pointed version lands here for you to correct.
+              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -227,6 +238,10 @@
           <div class="tab-pane fade" id="phonemes-pane" role="tabpanel">
             <div class="input-section">
               <h2 class="section-title"><i class="fas fa-code"></i> IPA phonemes</h2>
+              <p class="pane-hint muted small">
+                The exact sounds, straight to the voice &mdash; no lexicon, no rules.
+                Generate on the Text tab first and the IPA lands here for fine-tuning.
+              </p>
               <textarea
                 autocomplete="off"
                 autocorrect="off"
@@ -285,19 +300,21 @@
           </div>
 
           <div class="result-block" id="derivation-block">
-            <h2 class="result-title">
-              <i class="fas fa-table-list"></i> Diacritics and phonemes
-              <span class="token-count" id="token-count"></span>
-            </h2>
+            <p class="read-summary" id="read-summary"></p>
+            <details id="derivation-details">
+              <summary class="result-title">
+                <i class="fas fa-table-list"></i> How each word was read
+                <span class="token-count" id="token-count"></span>
+              </summary>
             <div class="table-scroll">
               <table class="token-table" id="token-table">
                 <thead>
                   <tr>
                     <th scope="col">Word</th>
-                    <th scope="col">Nikud</th>
-                    <th scope="col">IPA</th>
-                    <th scope="col">Route</th>
-                    <th scope="col">Confidence</th>
+                    <th scope="col">With vowels</th>
+                    <th scope="col">Sounds</th>
+                    <th scope="col">Read from</th>
+                    <th scope="col">Certainty</th>
                     <th scope="col">Layer</th>
                     <th scope="col">Why</th>
                   </tr>
@@ -305,6 +322,7 @@
                 <tbody id="token-tbody"></tbody>
               </table>
             </div>
+            </details>
           </div>
         </section>
       </main>
