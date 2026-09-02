@@ -51,7 +51,7 @@ _TABLE_ATTRS: tuple[str, ...] = (
     "_AUDIO_ENDORSED",
     "_HOMOGRAPH_LK",
     "_SEFARIA_POINTED",
-    "_NIBORSKI_PHONETIC",
+    "_PRINTED_RESPELLING",
     "_MODEL_POINTED",
     "_WORD_LATIN",
     "_ABBREVIATIONS",
@@ -467,7 +467,7 @@ _SOURCES: tuple[tuple[str, str, str, int], ...] = (
     ("_AUDIO_PE", "audio", "Corpus audio (פ/ף)", 2),
     ("_AUDIO_VOWEL", "audio", "Corpus audio (vowel slot)", 2),
     ("_SEFARIA_POINTED", "sefaria", "Sefaria pointing", 3),
-    ("_NIBORSKI_PHONETIC", "niborski", "Niborski phonetic index", 3),
+    ("_PRINTED_RESPELLING", "respelling", "Printed respelling index", 3),
     ("_MODEL_POINTED", "model", "Model guess (weakest)", 4),
 )
 _SOURCE_LABELS: dict[str, str] = {slug: label for _, slug, label, _ in _SOURCES}

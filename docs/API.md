@@ -478,7 +478,7 @@ doubles as a confidence read and `tier` is literally the routing order of spec v
 | --- | --- | --- |
 | 1 | `gold`, `multiword`, `abbrev` | Native-verified verdicts. |
 | 2 | `homograph`, `audio` | Decided from corpus audio. |
-| 3 | `sefaria`, `niborski` | Taken from a pointed source or a printed phonetic index. |
+| 3 | `sefaria`, `respelling` | Taken from a pointed source or a printed phonetic index. |
 | 4 | `model` | The pointing model's own guess — the weakest reading, and the one most worth a native verdict. |
 
 Query parameters:
