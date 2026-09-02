@@ -6,7 +6,7 @@ the Yiddish label stack, the blue-yi TTS runtime, and the HTTP routes — end to
 end. Exits non-zero on any failure, so it works as a Docker build gate.
 
 Modelled on Phonikud-yi/src/selftest.py, and it carries that file's canaries
-forward: the G2P readings that only the seven generated lexicon tables can
+forward: the G2P readings that only the eight generated lexicon tables can
 produce. That check (§4 below) is the deployment guard. A missing table makes
 yiddish_g2p return {} for that table and keep going, so the Space would serve
 plausible-but-wrong Yiddish — פעקל as fɛkl instead of pɛkl — and say nothing.
@@ -540,7 +540,7 @@ try:
     info = engine.info()
     tables = info.get("tables", {})
     empty = sorted(name for name, size in tables.items() if not size)
-    check(len(tables) == 7, "info() reports all 7 lexicon tables", f"{len(tables)} tables")
+    check(len(tables) == 8, "info() reports all 8 lexicon tables", f"{len(tables)} tables")
     check(
         not empty,
         "every lexicon table is non-empty",

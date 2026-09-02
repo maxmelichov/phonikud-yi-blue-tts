@@ -6,14 +6,14 @@ chunks) > published pointing (Sefaria) > model guesses. A lower tier never
 overrides a higher one, and the bottom two tiers come back marked LOW
 confidence for human review (verified: every 'sefaria-pointed' and every
 'model-pointed-guess' record in a full-corpus census carried confidence=LOW).
-That chain lives entirely in the engine's seven generated tables, which is why
+That chain lives entirely in the engine's eight generated tables, which is why
 a deployment missing a table is treated here as a hard failure rather than a
 degraded mode.
 
 Table sizes as deployed at ENGINE_REVISION, read out of ``verify(strict=False)``
 rather than from prose -- GOLD_LEXICON 509, _AUDIO_PE 77, _AUDIO_VOWEL 120,
 _AUDIO_ENDORSED 107, _HOMOGRAPH_LK 215, _SEFARIA_POINTED 3460,
-_MODEL_POINTED 7633. The engine's own floors (``yiddish_labels._EXPECTED``) sit
+_MODEL_POINTED 7633, _NIBORSKI_PHONETIC 1991. The engine's own floors (``yiddish_labels._EXPECTED``) sit
 at or below every one of those and ask for GOLD_LEXICON >= 502, so a "502 words"
 figure was the floor the guard enforces, never the count the deployment holds.
 (One floor has no slack at all: _AUDIO_PE's is 77 and the deployed table holds

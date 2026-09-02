@@ -32,8 +32,12 @@ ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
 # was not shipped. This revision adds the vowel-rule work on top: וי defaults
 # to ɔj (Weinreich 44) with oʊ kept as a closed û-class list so אויך is not
 # collapsed with הויז, plus ברויכ־, the פויל/פוילן homograph, and the
-# די + bare טויב context read. model_pointed_lk at 7,633 types.
-ENGINE_REVISION = "faf402b770cee967a0c3ca2b55609565a4c73bc5"
+# די + bare טויב context read. This revision adds the EIGHTH lexicon table:
+# data/lexicons/niborski_phonetic_lk.py, 1,991 readings from the phonetic
+# index of Niborski's LK dictionary, ranked between Sefaria pointing and the
+# model guess (rescue #3, reason 'niborski-phonetic'); רבנוס now reads
+# rabˈajnis. All six G2P suites green; bundle selftest green.
+ENGINE_REVISION = "8bc8a5a780b0a77f4f4f0a871ba82874490ee32c"
 
 # The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries

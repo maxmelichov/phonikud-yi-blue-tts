@@ -18,7 +18,7 @@ IPA drives the acoustic runtime,
 >
 > **No accuracy figure is published anywhere in this API or its docs.** The source project
 > records that no measured word-error or accuracy number exists for this stack. Verified
-> engineering figures are fair game (509 native-verified gold words, 7 lexicon tables, a
+> engineering figures are fair game (509 native-verified gold words, 8 lexicon tables, a
 > 1.83 M-token corpus, 44.1 kHz, the timings below); a quality percentage is not.
 
 The API shape is ported from MamboTTS (`mambotts-server`): same field names, same error
@@ -90,7 +90,7 @@ kind-3 frame carrying the message as UTF-8 text; see [Streaming frame format](#s
 
 The pipeline, in order:
 
-1. **G2P** – `yiddish_labels.text_to_ipa` over the seven lexicon tables → IPA. It runs the
+1. **G2P** – `yiddish_labels.text_to_ipa` over the eight lexicon tables → IPA. It runs the
    engine's full authority chain internally (native gold verdicts > corpus audio > published
    pointing > model guess) and reads any diacritics present in the input as evidence.
 2. **validate** – every unit is checked against the closed inventory. Caller-supplied IPA that
@@ -190,7 +190,7 @@ Response — `HealthResponse`:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `status` | `string` | `warming` (the warm-up thread is still running), `ready` (engine **and** a runtime in memory), or `error` (warm-up finished and failed). |
-| `engine_loaded` | `bool` | The snapshot is on disk and `yiddish_labels` imported, which means all seven lexicon tables verified. |
+| `engine_loaded` | `bool` | The snapshot is on disk and `yiddish_labels` imported, which means all eight lexicon tables verified. |
 | `runtime_loaded` | `bool` | A TTS runtime is in memory. The warm-up loads the default runtime, so this becomes true on an idle Space without any request. |
 | `runtime` | `string` | Loaded runtime id, `""` if none. |
 | `engine_error` | `string` | The engine warm-up failure verbatim, or `""`. |
@@ -212,7 +212,7 @@ the acoustic runtime is then loaded by the first synthesis request instead of at
 
 `status: "error"` never clears on its own — alert on it instead of polling. A non-empty
 `engine_error` is the case worth watching: the import runs `yiddish_labels.verify()`, which
-raises when any of the seven tables is missing, deliberately fatal because `yiddish_g2p`
+raises when any of the eight tables is missing, deliberately fatal because `yiddish_g2p`
 otherwise swallows a missing table and returns plausible-but-wrong Yiddish (`פעקל` as `fɛkl`
 instead of `pɛkl`, `יארצייט` as `jˈarʦajt` instead of `jˈurʦajt`) with zero native verdicts and
 no warning.
@@ -478,7 +478,7 @@ doubles as a confidence read and `tier` is literally the routing order of spec v
 | --- | --- | --- |
 | 1 | `gold`, `multiword`, `abbrev` | Native-verified verdicts. |
 | 2 | `homograph`, `audio` | Decided from corpus audio. |
-| 3 | `sefaria` | Taken from a pointed source. |
+| 3 | `sefaria`, `niborski` | Taken from a pointed source or a printed phonetic index. |
 | 4 | `model` | The pointing model's own guess — the weakest reading, and the one most worth a native verdict. |
 
 Query parameters:
@@ -922,6 +922,6 @@ python3 scripts/selftest_space.py     # must print ALL CHECKS PASSED
 ```
 
 It checks the registry, the inventory and folding, WAV packing and the frame header, the
-engine's canary readings (including all seven lexicon tables non-empty), an end-to-end
+engine's canary readings (including all eight lexicon tables non-empty), an end-to-end
 synthesis, and that every route documented above is actually exposed. Set
 `PHONIKUD_YI_ENGINE_DIR` to an unpacked engine bundle to run it without the 1.23 GB download.
