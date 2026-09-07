@@ -1,4 +1,9 @@
-"""ABE101-only lexicon editor: lookup, update, and add gold / וי-class readings."""
+"""Editor-only lexicon writes: lookup, update, and add gold / וי-class readings.
+
+There is deliberately no route that lists or searches the lexicon. A reviewer
+fixes the words in the sentence they just heard, reached by word from the
+results table; the dictionary as a whole is not something the Space hands out.
+"""
 
 from __future__ import annotations
 
@@ -50,44 +55,6 @@ async def lexicon_me(request: Request) -> dict[str, Any]:
         "persist": lexicon_edits.persist_status(),
         "engine_loaded": engine.is_loaded(),
     }
-
-
-@router.get(
-    "/browse",
-    summary="Page through the live lexicon (ABE101 only)",
-    response_model=None,
-)
-async def lexicon_browse(
-    request: Request,
-    q: str = "",
-    source: str = "",
-    only: str = "",
-    offset: int = 0,
-    limit: int = 50,
-) -> dict[str, Any] | JSONResponse:
-    """The editor's table view.
-
-    One row per type, attributed to the highest-authority table that holds it,
-    so `source` doubles as a confidence read: `gold` is native-verified, `model`
-    is the pointing model's own guess and the most worth correcting.
-
-    `q` matches the Hebrew spelling, its pointed form, or the IPA. `only` takes
-    `vav_yud` (words containing וי), `flagged` (וי readings held uncertain),
-    `edited` (changed on this Space), or `variants` (more than one reading).
-    """
-    gated = _gate(request)
-    if not isinstance(gated, str):
-        return gated
-    if not engine.is_loaded():
-        return write_error(503, "not_available", "engine is still loading")
-    try:
-        return await run_in_threadpool(
-            lexicon_edits.browse,
-            engine._g2p,
-            q=q, source=source, only=only, offset=offset, limit=limit,
-        )
-    except ValueError as exc:
-        return write_error(400, "invalid_request", str(exc))
 
 
 @router.get(

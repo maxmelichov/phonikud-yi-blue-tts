@@ -372,6 +372,26 @@ def apply_seed(g2p: ModuleType) -> list[str]:
     return lines
 
 
+def invalidate_engine_caches(g2p: ModuleType) -> None:
+    """Drop every memo the engine keeps of a word's reading.
+
+    The engine caches its routing decision per token. A reviewer always hears a
+    word before deciding it is wrong, so by the time the edit lands the old
+    reading is already memoised: the save succeeded, the file was written, and
+    the voice went on saying the same thing. Anything with `cache_clear` is
+    cleared too, so a future memo does not reintroduce this silently.
+    """
+    cache = getattr(g2p, "_ROUTE_CACHE", None)
+    if hasattr(cache, "clear"):
+        cache.clear()
+    for name in dir(g2p):
+        if name.startswith("__"):
+            continue
+        clear = getattr(getattr(g2p, name, None), "cache_clear", None)
+        if callable(clear):
+            clear()
+
+
 def apply_edit_row(g2p: ModuleType, row: dict[str, Any]) -> None:
     word = validate_word(str(row.get("word") or ""))
     ipa = validate_ipa(str(row.get("ipa_primary") or ""))
@@ -388,6 +408,8 @@ def apply_edit_row(g2p: ModuleType, row: dict[str, Any]) -> None:
     latin = row.get("latin")
     _write_latin(g2p, word, str(latin) if latin else None,
                  target if target in ("oʊ", "ɔj") else vav_yud.classify_ipa(ipa))
+    # The tables are the truth now; the engine's memo of the old reading is not.
+    invalidate_engine_caches(g2p)
 
 
 def apply_to_engine(g2p: ModuleType) -> None:
@@ -403,6 +425,9 @@ def apply_to_engine(g2p: ModuleType) -> None:
                 apply_edit_row(g2p, row)
             except Exception as exc:  # noqa: BLE001 - one bad row must not drop TTS
                 log.warning("skipping persisted lexicon edit %r: %s", row.get("word"), exc)
+        # apply_seed writes gold directly, so clear once more for the whole
+        # overlay rather than trusting that startup ran before anything cached.
+        invalidate_engine_caches(g2p)
         _applied = True
         _persist_note = source
         log.info(

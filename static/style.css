@@ -1224,33 +1224,128 @@ select.control-input {
   border-color: var(--accent);
 }
 
-/* "Fix" on each row of the results table: the reviewer corrects the word he
-   just heard, without going near the browse list. Last in the sheet so the
-   button rules above cannot take it over. */
+/* "Fix" on each row of the results table, and the IPA pad inside the editor.
+   Both are solid, not ghost buttons: a transparent button whose text colour
+   comes from a token reads as an invisible or black smudge the moment anything
+   about the surrounding cell changes. Every colour here also carries a literal
+   fallback, so a missing token degrades to a readable button rather than a
+   black one. Last in the sheet so the .btn-generate rules cannot take them. */
+
 .tok-fix-col {
   width: 1%;
   white-space: nowrap;
   text-align: end;
 }
 
-.btn-fix {
+.token-table .btn-fix {
+  display: inline-block;
   font: inherit;
   font-size: 0.85em;
+  font-weight: 600;
   line-height: 1;
-  padding: 0.35em 0.75em;
+  padding: 0.4em 0.85em;
   border-radius: 6px;
   cursor: pointer;
+  background: #2f5d8a;
+  background: var(--accent, #2f5d8a);
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+
+.token-table .btn-fix:hover {
+  background: #24486c;
+  background: var(--accent-hover, #24486c);
+  color: #ffffff;
+}
+
+.token-table .btn-fix:focus-visible {
+  outline: 2px solid var(--accent, #2f5d8a);
+  outline-offset: 2px;
+}
+
+.ipa-pad {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.ipa-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.ipa-group-label {
+  flex: 0 0 5.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5c6570;
+  color: var(--text-muted, #5c6570);
+}
+
+.ipa-pad .ipa-key {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 2.7rem;
+  padding: 0.32rem 0.45rem;
+  font: inherit;
+  line-height: 1.15;
+  cursor: pointer;
+  border-radius: 6px;
+  background: #ffffff;
+  background: var(--surface-raised, #ffffff);
+  color: #16191d;
+  color: var(--text, #16191d);
+  border: 1px solid #cbd2da;
+  border-color: var(--border-strong, #cbd2da);
+}
+
+.ipa-pad .ipa-key:hover {
+  background: rgba(47, 93, 138, 0.08);
+  background: var(--accent-soft, rgba(47, 93, 138, 0.08));
+  border-color: #2f5d8a;
+  border-color: var(--accent, #2f5d8a);
+}
+
+.ipa-pad .ipa-key:focus-visible {
+  outline: 2px solid var(--accent, #2f5d8a);
+  outline-offset: 2px;
+}
+
+.ipa-pad .ipa-key-sym {
+  font-family: var(--mono, ui-monospace, Menlo, monospace);
+  font-size: 1rem;
+  color: inherit;
+}
+
+.ipa-pad .ipa-key-ex {
+  font-family: var(--hebrew, inherit);
+  font-size: 0.7rem;
+  color: #5c6570;
+  color: var(--text-muted, #5c6570);
+}
+
+.ipa-pad .ipa-key-tool {
+  min-width: 0;
+  font-size: 0.8rem;
+  color: #5c6570;
+  color: var(--text-muted, #5c6570);
+}
+
+/* After .btn-generate, so the quiet variant actually wins. */
+.btn-quiet {
   background: transparent;
-  color: var(--accent);
+  color: var(--text-muted);
   border: 1px solid var(--border-strong);
 }
 
-.btn-fix:hover {
+.btn-quiet:hover:not(:disabled) {
   background: var(--accent-soft);
+  color: var(--accent);
   border-color: var(--accent);
-}
-
-.btn-fix:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }

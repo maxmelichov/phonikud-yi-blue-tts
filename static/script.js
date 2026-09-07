@@ -40,6 +40,15 @@ const el = (id) => document.getElementById(id);
 /* Set by initLexiconEditor once /v1/lexicon/me says this visitor may edit.
    The results table is rendered by renderTokens, which runs long before the
    editor exists, so the two talk through these instead of a shared closure. */
+/* The closed phone inventory, each letter carried by a word the reviewer knows.
+   Every example is a real reading the engine already holds — gold for all but
+   ʒ (audio-endorsed) and ʤ (the דזש digraph) — so nothing here is invented.
+   ŋ has no lexicon word: the engine writes nɡ, and it stays for completeness. */
+const IPA_PAD = [{"label":"Stress","phones":[{"p":"ˈ","w":"אבער","i":"ˈɔbər"}]},{"label":"Vowels","phones":[{"p":"a","w":"אז","i":"az"},{"p":"aː","w":"זיין","i":"zaːn"},{"p":"ɛ","w":"עס","i":"ɛs"},{"p":"ə","w":"די","i":"də"},{"p":"i","w":"איז","i":"iz"},{"p":"u","w":"וואס","i":"vus"},{"p":"ɔ","w":"אבער","i":"ˈɔbər"}]},{"label":"Diphthongs","phones":[{"p":"ej","w":"דעם","i":"dejm"},{"p":"aj","w":"זיי","i":"zaj"},{"p":"ɔj","w":"שוין","i":"ʃɔjn"},{"p":"oʊ","w":"אויף","i":"oʊf"}]},{"label":"Consonants","phones":[{"p":"b","w":"אבער","i":"ˈɔbər"},{"p":"d","w":"די","i":"də"},{"p":"f","w":"פון","i":"fin"},{"p":"ɡ","w":"געווען","i":"ɡəvˈejn"},{"p":"h","w":"האט","i":"hut"},{"p":"j","w":"יא","i":"ju"},{"p":"k","w":"קען","i":"kɛn"},{"p":"l","w":"זאל","i":"zul"},{"p":"m","w":"מיט","i":"mit"},{"p":"n","w":"און","i":"in"},{"p":"p","w":"עפעס","i":"ˈɛpəs"},{"p":"r","w":"פאר","i":"far"},{"p":"s","w":"וואס","i":"vus"},{"p":"t","w":"נישט","i":"niʃt"},{"p":"v","w":"וואס","i":"vus"},{"p":"z","w":"איז","i":"iz"},{"p":"x","w":"איך","i":"ix"},{"p":"ʃ","w":"נישט","i":"niʃt"},{"p":"ʒ","w":"השגחה","i":"haʒɡˈuxə"},{"p":"ʦ","w":"צו","i":"ʦi"},{"p":"ʧ","w":"מענטשן","i":"mɛnʧn"},{"p":"ʤ","w":"דזשאב","i":"ʤab"},{"p":"ŋ","w":"","i":""}]}];
+
+/* The two-character phones, so Delete removes a letter and not half of one. */
+const IPA_MULTI = ["aː", "ej", "aj", "ɔj", "oʊ"];
+
 const lexBridge = { canEdit: false, editWord: null };
 
 /* The last rows renderTokens drew. /v1/lexicon/me is a separate request, so an
@@ -506,14 +515,12 @@ function initLexiconEditor() {
   const logout = el("auth-logout");
   const who = el("auth-who");
   const status = el("lex-status");
-  const tbody = el("lex-tbody");
   const panel = el("lex-edit");
 
-  // Browse state. `word` is null while adding, which is the only difference
-  // between the two modes: /update takes whatever word is in the box, /add
-  // refuses a word that already exists.
-  const state = { q: "", source: "", only: "", offset: 0, limit: 50, matched: 0, editing: null };
-  let searchTimer = null;
+  // `editing` is null while adding, which is the only difference between the
+  // two modes: /update takes whatever word is in the box, /add refuses a word
+  // that already exists.
+  const state = { editing: null };
 
   function setLexStatus(text, kind) {
     if (!status) return;
@@ -544,208 +551,11 @@ function initLexiconEditor() {
         // Redraw anything already on screen, so a table rendered before this
         // answer arrived still gets its Fix column.
         if (lastTokens.length) renderTokens(lastTokens);
-        load();
       }
     })
     .catch(() => {
       /* public path: TTS still works without OAuth */
     });
-
-  // ---- browsing -------------------------------------------------------------
-
-  function fillSources(sources) {
-    const select = el("lex-source");
-    if (!select || select.dataset.filled) return;
-    (sources || []).forEach((s) => {
-      const opt = document.createElement("option");
-      opt.value = s.slug;
-      opt.textContent = s.label;
-      select.appendChild(opt);
-    });
-    select.dataset.filled = "1";
-  }
-
-  function renderRows(rows) {
-    if (!tbody) return;
-    tbody.textContent = "";
-    if (!rows.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 6;
-      td.className = "lex-empty muted";
-      td.textContent = state.q
-        ? "No word matches “" + state.q + "”. Use New word to add it."
-        : "Nothing matches these filters.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
-    }
-    rows.forEach((row) => {
-      const tr = document.createElement("tr");
-      tr.className = "lex-row" + (row.edited ? " lex-row-edited" : "");
-      tr.tabIndex = 0;
-      tr.setAttribute("role", "button");
-      tr.setAttribute("aria-label", "Edit " + row.word);
-
-      const word = document.createElement("td");
-      word.className = "rtl lex-cell-word";
-      word.textContent = row.word;
-      if (row.pointed) {
-        const pointed = document.createElement("span");
-        pointed.className = "lex-pointed rtl";
-        pointed.textContent = row.pointed;
-        word.appendChild(pointed);
-      }
-      tr.appendChild(word);
-
-      const ipa = document.createElement("td");
-      ipa.className = "mono lex-cell-ipa";
-      ipa.textContent = row.ipa || "—";
-      tr.appendChild(ipa);
-
-      const alt = document.createElement("td");
-      alt.className = "mono muted small";
-      alt.textContent = (row.variants || []).filter((v) => v !== row.ipa).join("  ·  ") || "—";
-      tr.appendChild(alt);
-
-      const src = document.createElement("td");
-      const chip = document.createElement("span");
-      chip.className = "lex-chip lex-tier-" + row.tier;
-      chip.textContent = row.source;
-      chip.title = row.source_label;
-      src.appendChild(chip);
-      if (row.edited) {
-        const badge = document.createElement("span");
-        badge.className = "lex-chip lex-chip-edited";
-        badge.textContent = "changed";
-        src.appendChild(badge);
-      }
-      if (row.flagged) {
-        const badge = document.createElement("span");
-        badge.className = "lex-chip lex-chip-flagged";
-        badge.textContent = "uncertain";
-        badge.title = row.flag_reason || "וי class held uncertain";
-        src.appendChild(badge);
-      }
-      tr.appendChild(src);
-
-      const freq = document.createElement("td");
-      freq.className = "lex-num muted";
-      freq.textContent = row.freq ? String(row.freq) : "—";
-      tr.appendChild(freq);
-
-      const action = document.createElement("td");
-      action.className = "lex-cell-action";
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "lex-edit-btn";
-      btn.textContent = "Edit";
-      action.appendChild(btn);
-      tr.appendChild(action);
-
-      const open = () => openEdit(row);
-      tr.addEventListener("click", open);
-      tr.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      });
-      tbody.appendChild(tr);
-    });
-  }
-
-  function renderCount(body) {
-    const count = el("lex-count");
-    const range = el("lex-range");
-    const filtered = body.matched !== body.total;
-    if (count) {
-      count.textContent = filtered
-        ? body.matched.toLocaleString() + " of " + body.total.toLocaleString() + " words match"
-        : body.total.toLocaleString() + " words in the lexicon";
-    }
-    if (range) {
-      const first = body.matched ? body.offset + 1 : 0;
-      const last = Math.min(body.offset + body.limit, body.matched);
-      range.textContent = first + "–" + last;
-    }
-    const prev = el("lex-prev");
-    const next = el("lex-next");
-    if (prev) prev.disabled = body.offset <= 0;
-    if (next) next.disabled = body.offset + body.limit >= body.matched;
-  }
-
-  async function load() {
-    const params = new URLSearchParams({
-      q: state.q,
-      source: state.source,
-      only: state.only,
-      offset: String(state.offset),
-      limit: String(state.limit),
-    });
-    try {
-      const response = await fetch("/v1/lexicon/browse?" + params.toString(), {
-        credentials: "same-origin",
-      });
-      const body = await response.json();
-      if (!response.ok) {
-        const count = el("lex-count");
-        if (count) count.textContent = (body.error && body.error.message) || "Could not load the lexicon.";
-        return;
-      }
-      state.matched = body.matched;
-      fillSources(body.sources);
-      renderRows(body.rows);
-      renderCount(body);
-    } catch (err) {
-      const count = el("lex-count");
-      if (count) count.textContent = String(err);
-    }
-  }
-
-  function refilter() {
-    state.offset = 0;
-    load();
-  }
-
-  const q = el("lex-q");
-  if (q) {
-    q.addEventListener("input", () => {
-      state.q = q.value.trim();
-      clearTimeout(searchTimer);
-      searchTimer = setTimeout(refilter, 200);
-    });
-  }
-  const sourceSel = el("lex-source");
-  if (sourceSel) {
-    sourceSel.addEventListener("change", () => {
-      state.source = sourceSel.value;
-      refilter();
-    });
-  }
-  const onlySel = el("lex-only");
-  if (onlySel) {
-    onlySel.addEventListener("change", () => {
-      state.only = onlySel.value;
-      refilter();
-    });
-  }
-  const prevBtn = el("lex-prev");
-  if (prevBtn) {
-    prevBtn.addEventListener("click", () => {
-      state.offset = Math.max(0, state.offset - state.limit);
-      load();
-    });
-  }
-  const nextBtn = el("lex-next");
-  if (nextBtn) {
-    nextBtn.addEventListener("click", () => {
-      if (state.offset + state.limit < state.matched) {
-        state.offset += state.limit;
-        load();
-      }
-    });
-  }
 
   // ---- editing --------------------------------------------------------------
 
@@ -758,6 +568,7 @@ function initLexiconEditor() {
     state.editing = row;
     if (!panel) return;
     panel.hidden = false;
+    buildIpaPad();
     const wordField = el("lex-word-field");
     const vyField = el("lex-vy-field");
     if (wordField) wordField.hidden = true;
@@ -789,6 +600,94 @@ function initLexiconEditor() {
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     const ipaInput = el("lex-ipa");
     if (ipaInput) ipaInput.focus();
+  }
+
+  /* The IPA pad. Every letter the engine accepts, one click each, with the
+     word it comes from underneath — a reviewer should never have to find ʦ or ˈ
+     on a keyboard. Built once, the first time the panel is opened. */
+  function buildIpaPad() {
+    const pad = el("ipa-pad");
+    if (!pad || pad.dataset.built) return;
+    IPA_PAD.forEach((group) => {
+      const wrap = document.createElement("div");
+      wrap.className = "ipa-group";
+      const label = document.createElement("span");
+      label.className = "ipa-group-label";
+      label.textContent = group.label;
+      wrap.appendChild(label);
+      group.phones.forEach((entry) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ipa-key";
+        const sym = document.createElement("span");
+        sym.className = "ipa-key-sym";
+        sym.textContent = entry.p;
+        btn.appendChild(sym);
+        if (entry.w) {
+          const ex = document.createElement("span");
+          ex.className = "ipa-key-ex";
+          ex.dir = "rtl";
+          ex.textContent = entry.w;
+          btn.appendChild(ex);
+          btn.title = entry.p + " as in " + entry.w + " (" + entry.i + ")";
+        } else {
+          btn.title = entry.p;
+        }
+        btn.addEventListener("click", () => insertIpa(entry.p));
+        wrap.appendChild(btn);
+      });
+      pad.appendChild(wrap);
+    });
+
+    const tools = document.createElement("div");
+    tools.className = "ipa-group ipa-tools";
+    [["⌫ Delete", () => backspaceIpa()], ["Clear", () => setValue("lex-ipa", "")]].forEach(
+      ([text, fn]) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ipa-key ipa-key-tool";
+        btn.textContent = text;
+        btn.addEventListener("click", () => {
+          fn();
+          const input = el("lex-ipa");
+          if (input) input.focus();
+        });
+        tools.appendChild(btn);
+      }
+    );
+    pad.appendChild(tools);
+    pad.dataset.built = "1";
+  }
+
+  /* Insert at the caret, not at the end: a stress mark belongs in front of the
+     vowel it marks, which is usually mid-word. */
+  function insertIpa(chars) {
+    const input = el("lex-ipa");
+    if (!input) return;
+    const start = input.selectionStart === null ? input.value.length : input.selectionStart;
+    const end = input.selectionEnd === null ? input.value.length : input.selectionEnd;
+    input.value = input.value.slice(0, start) + chars + input.value.slice(end);
+    const caret = start + chars.length;
+    input.focus();
+    input.setSelectionRange(caret, caret);
+  }
+
+  /* One IPA letter, not one code unit: aː, ɔj and oʊ delete whole. */
+  function backspaceIpa() {
+    const input = el("lex-ipa");
+    if (!input) return;
+    const start = input.selectionStart === null ? input.value.length : input.selectionStart;
+    const end = input.selectionEnd === null ? input.value.length : input.selectionEnd;
+    if (start !== end) {
+      input.value = input.value.slice(0, start) + input.value.slice(end);
+      input.setSelectionRange(start, start);
+      return;
+    }
+    if (!start) return;
+    const two = input.value.slice(start - 2, start);
+    const drop = IPA_MULTI.indexOf(two) >= 0 ? 2 : 1;
+    input.value = input.value.slice(0, start - drop) + input.value.slice(start);
+    input.setSelectionRange(start - drop, start - drop);
   }
 
   /* Fix, from the results table. The word came out of the sentence the user
@@ -838,6 +737,7 @@ function initLexiconEditor() {
     state.editing = null;
     if (!panel) return;
     panel.hidden = false;
+    buildIpaPad();
     const wordField = el("lex-word-field");
     const vyField = el("lex-vy-field");
     if (wordField) wordField.hidden = false;
@@ -857,14 +757,12 @@ function initLexiconEditor() {
     if (wordInput) wordInput.focus();
   }
 
-  function closeEdit() {
+  function closeEdit(keepStatus) {
     state.editing = null;
     if (panel) panel.hidden = true;
-    setLexStatus("");
+    if (!keepStatus) setLexStatus("");
   }
 
-  const newBtn = el("lex-new");
-  if (newBtn) newBtn.addEventListener("click", openNew);
   [el("lex-cancel"), el("lex-cancel-2")].forEach((btn) => {
     if (btn) btn.addEventListener("click", closeEdit);
   });
@@ -910,7 +808,7 @@ function initLexiconEditor() {
             ". The voice uses it from the next request on.",
           "ok"
         );
-        await load();
+        closeEdit(true);
       } catch (err) {
         setLexStatus(String(err), "err");
       } finally {

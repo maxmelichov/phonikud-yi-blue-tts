@@ -459,41 +459,24 @@ no Yiddish numeral reader in the engine.
 ### `GET /v1/lexicon/me`
 
 Who is signed in, and whether they may edit the lexicon. Public. `can_edit` is true only for
-Hugging Face user `ABE101` (or `LEXICON_EDITOR_USER` if that Space variable is set). Login and
+a Hugging Face user named in `LEXICON_EDITOR_USER` (default `ABE101`), which takes one name
+or a comma-separated list, matched case-insensitively. Login and
 logout URLs are `/oauth/huggingface/login` and `/oauth/huggingface/logout`.
 
 ### `GET /v1/lexicon/lookup`
 
-Look up one type in the live engine tables. **ABE101 only** — unauthenticated callers get
+Look up one type in the live engine tables. **Editors only** — unauthenticated callers get
 `401 forbidden`, any other signed-in user `403 forbidden`.
 
-### `GET /v1/lexicon/browse`
+The response carries the fields the editor panel reads — `ipa`, `source`, `source_label`,
+`tier`, `freq`, `pointed` — alongside `word`, `key`, `variants`, `layer`, `note`,
+`vav_yud_class`, `has_vav_yud`, `flagged` and `found`, so one word arrives ready to edit.
+When no table holds the type, `found` is `false` and `ipa_primary` carries the engine's
+current reading, so a reviewer corrects a guess instead of typing IPA from nothing.
 
-Page through every type the engine holds — the editor's table view. **ABE101 only.**
-
-One row per type, attributed to the highest-authority table that carries it, so `source`
-doubles as a confidence read and `tier` is literally the routing order of spec v3 §3:
-
-| `tier` | `source` | Meaning |
-| --- | --- | --- |
-| 1 | `gold`, `multiword`, `abbrev` | Native-verified verdicts. |
-| 2 | `homograph`, `audio` | Decided from corpus audio. |
-| 3 | `sefaria`, `respelling` | Taken from a pointed source or a printed phonetic index. |
-| 4 | `model` | The pointing model's own guess — the weakest reading, and the one most worth a native verdict. |
-
-Query parameters:
-
-| Name | Default | Notes |
-| --- | --- | --- |
-| `q` | `""` | Matches the Hebrew spelling, its pointed form, or the IPA. Results are re-ranked so an exact word beats a longer compound that merely contains it; without `q` the order is corpus frequency. |
-| `source` | `""` | One of the `slug` values in the response's `sources` list. |
-| `only` | `""` | `vav_yud` (contains וי), `flagged` (וי class held uncertain), `edited` (changed on this Space), `variants` (more than one accepted reading). |
-| `offset` / `limit` | `0` / `50` | `limit` is capped at 200. |
-
-The response carries `total`, `matched`, `offset`, `limit`, `rows`, and `sources` (the picker's
-options). Each row has `word`, `key`, `ipa`, `variants`, `pointed`, `source`, `source_label`,
-`tier`, `freq`, `note`, `layer`, `vav_yud_class`, `has_vav_yud`, `flagged`, `flag_reason`
-and `edited` — the same fields `POST /v1/lexicon/update` accepts, so a row can be edited in place.
+There is deliberately **no route that lists or searches the lexicon**. A reviewer fixes the
+words in the sentence they just synthesised, reached by word from the results table; the
+dictionary as a whole is not something the Space hands out.
 
 ### `POST /v1/lexicon/update`
 
