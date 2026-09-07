@@ -629,11 +629,14 @@ function initLexiconEditor() {
           ex.dir = "rtl";
           ex.textContent = entry.w;
           btn.appendChild(ex);
-          btn.title = entry.p + " as in " + entry.w + " (" + entry.i + ")";
+          btn.title = "Hear " + entry.p + " as in " + entry.w + " (" + entry.i + ")";
         } else {
           btn.title = entry.p;
         }
-        btn.addEventListener("click", () => insertIpa(entry.p));
+        btn.addEventListener("click", () => {
+          insertIpa(entry.p);
+          playPhone(entry);
+        });
         wrap.appendChild(btn);
       });
       pad.appendChild(wrap);
@@ -657,6 +660,44 @@ function initLexiconEditor() {
     );
     pad.appendChild(tools);
     pad.dataset.built = "1";
+  }
+
+  /* Hear the letter, not its name. A reviewer who does not read IPA has no way
+     to tell ʃ from ʒ on sight, so every key speaks when pressed. It plays the
+     example word rather than the bare phone: a stop like b or k in isolation is
+     almost inaudible, while צו is a word he says every day. Each clip is
+     fetched once and kept for the life of the page. */
+  const phoneAudio = {};
+
+  async function playPhone(entry) {
+    const key = entry.p;
+    try {
+      if (!phoneAudio[key]) {
+        const response = await fetch("/v1/audio/speech", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: entry.i || entry.p,
+            input_is_phonemes: true,
+            voice: currentVoice(),
+          }),
+        });
+        if (!response.ok) return;
+        phoneAudio[key] = URL.createObjectURL(await response.blob());
+      }
+      const sound = new Audio(phoneAudio[key]);
+      sound.play().catch(() => {
+        /* autoplay policies vary; a silent failure is better than an error */
+      });
+    } catch (err) {
+      /* the pad still inserts even when the network does not cooperate */
+    }
+  }
+
+  function currentVoice() {
+    const select = el("voice-select");
+    return (select && select.value) || "";
   }
 
   /* Insert at the caret, not at the end: a stress mark belongs in front of the
