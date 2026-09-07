@@ -1223,3 +1223,34 @@ select.control-input {
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* "Fix" on each row of the results table: the reviewer corrects the word he
+   just heard, without going near the browse list. Last in the sheet so the
+   button rules above cannot take it over. */
+.tok-fix-col {
+  width: 1%;
+  white-space: nowrap;
+  text-align: end;
+}
+
+.btn-fix {
+  font: inherit;
+  font-size: 0.85em;
+  line-height: 1;
+  padding: 0.35em 0.75em;
+  border-radius: 6px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border-strong);
+}
+
+.btn-fix:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.btn-fix:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

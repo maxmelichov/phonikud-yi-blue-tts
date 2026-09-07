@@ -221,7 +221,46 @@ def lookup(g2p: ModuleType, word: str) -> dict[str, Any]:
     payload["flagged"] = bool(flag)
     payload["flag_reason"] = flag or ""
     payload["existing"] = found is not None
+
+    # Browse-row parity. The results table opens the same edit panel the browse
+    # table does, so one word must arrive with the fields that panel reads:
+    # `ipa`, `source_label`, `tier`, `freq`.
+    row = _row_for_key(g2p, payload["key"])
+    if row is not None:
+        for field in ("ipa", "source", "source_label", "tier", "freq", "pointed"):
+            payload[field] = row[field]
+    else:
+        # No table holds it, so the reader is about to add it. Prefill with what
+        # the engine says today: correcting a guess is faster than typing IPA
+        # from nothing, and it shows exactly what is being overruled.
+        payload.setdefault("ipa", payload["ipa_primary"] or _live_reading(g2p, surface))
+        payload.setdefault("source", "")
+        payload.setdefault("source_label", "Not in any table yet — the engine guessed")
+        payload.setdefault("tier", 9)
+        payload.setdefault("freq", 0)
+        payload.setdefault("pointed", "")
+        if not payload["ipa_primary"]:
+            payload["ipa_primary"] = payload["ipa"]
     return payload
+
+
+def _live_reading(g2p: ModuleType, word: str) -> str:
+    """What the engine pronounces ``word`` as right now, table or not."""
+    try:
+        token = g2p.g2p_token(word)
+    except Exception:  # noqa: BLE001 - a prefill is never worth a 500
+        return ""
+    if isinstance(token, dict):
+        return str(token.get("ipa_primary") or "")
+    return str(getattr(token, "ipa_primary", "") or "")
+
+
+def _row_for_key(g2p: ModuleType, key: str) -> dict[str, Any] | None:
+    """The browse row for one lexicon key, or None when no table holds it."""
+    for row in _index(g2p):
+        if row["key"] == key:
+            return row
+    return None
 
 
 def _write_gold(g2p: ModuleType, word: str, ipa: str, variants: list[str],

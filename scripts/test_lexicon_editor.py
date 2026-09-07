@@ -134,6 +134,15 @@ def test_auth_gate() -> None:
     body = signed_out.body.decode() if hasattr(signed_out, "body") else ""
     check("forbidden" in body and "error" in body, "401 uses error envelope")
 
+    # A comma-separated list lets a native reviewer edit without a code change.
+    os.environ["LEXICON_EDITOR_USER"] = "ABE101, chezky"
+    check(auth.editor_usernames() == ("ABE101", "chezky"), "list splits on comma")
+    check(auth.require_editor(_FakeRequest("chezky")) == "chezky", "second editor passes")
+    check(auth.require_editor(_FakeRequest("CHEZKY")) == "CHEZKY", "match ignores case")
+    denied = auth.require_editor(_FakeRequest("someoneelse"))
+    check(getattr(denied, "status_code", None) == 403, "outsider still 403")
+    os.environ["LEXICON_EDITOR_USER"] = "ABE101"
+
 
 def test_create_app() -> None:
     print("create_app")
@@ -414,6 +423,27 @@ def test_http_browse() -> None:
         engine._g2p = orig_g2p
 
 
+def test_lookup_row_parity() -> None:
+    """The Fix button on a results row opens the panel the browse table opens,
+    so one word must come back carrying the fields that panel reads."""
+    print("lookup / browse parity")
+    g2p = _fake_g2p(gold={"די": {"word": "די", "ipa": "di", "layer": "G", "freq": 4153}})
+    lexicon_edits._browse_cache = None
+
+    found = lexicon_edits.lookup(g2p, "די")
+    for field in ("ipa", "source", "source_label", "tier", "freq"):
+        check(field in found, "found row carries " + field)
+    check(found["source_label"] == "Native-verified gold", "found row keeps its source")
+    check(found["ipa"] == "di", "found row ipa matches the table")
+
+    missing = lexicon_edits.lookup(g2p, "בליבל")
+    check(missing["found"] is False, "unknown word is not found")
+    for field in ("ipa", "source_label", "tier", "freq"):
+        check(field in missing, "unknown row still carries " + field)
+    check(missing["tier"] == 9, "unknown word sorts below every table")
+    check("guessed" in missing["source_label"], "unknown row says the engine guessed")
+
+
 def main() -> None:
     test_vav_yud()
     test_validation()
@@ -421,6 +451,7 @@ def main() -> None:
     test_create_app()
     test_add_entry()
     test_browse()
+    test_lookup_row_parity()
     test_http_add()
     test_http_browse()
     print("ALL CHECKS PASSED")

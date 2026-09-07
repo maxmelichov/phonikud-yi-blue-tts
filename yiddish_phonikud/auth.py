@@ -4,9 +4,10 @@ On a Space, ``hf_oauth: true`` in the README YAML provisions OAuth and
 ``attach_huggingface_oauth`` adds login/logout/callback routes. Identity is the
 logged-in Hugging Face username — not a shared password, not UI hiding.
 
-The allowed editor is ``LEXICON_EDITOR_USER`` (default ``ABE101``). Change it by
-setting that environment variable on the Space; do not fork the check into a
-client-side flag.
+The allowed editors are ``LEXICON_EDITOR_USER`` (default ``ABE101``), which
+takes one username or a comma-separated list so a reviewer can be added without
+a code change. Set it on the Space; do not fork the check into a client-side
+flag.
 """
 
 from __future__ import annotations
@@ -24,9 +25,26 @@ EDITOR_USER_ENV = "LEXICON_EDITOR_USER"
 DEFAULT_EDITOR_USER = "ABE101"
 
 
+def editor_usernames() -> tuple[str, ...]:
+    """Every Hugging Face username allowed to write lexicon edits.
+
+    Comma-separated so a native reviewer can be added from Space settings.
+    Comparison is case-insensitive because HF usernames are.
+    """
+    raw = os.environ.get(EDITOR_USER_ENV) or DEFAULT_EDITOR_USER
+    names = tuple(n.strip() for n in raw.split(",") if n.strip())
+    return names or (DEFAULT_EDITOR_USER,)
+
+
 def editor_username() -> str:
-    """The one Hugging Face username allowed to write lexicon edits."""
-    return (os.environ.get(EDITOR_USER_ENV) or DEFAULT_EDITOR_USER).strip() or DEFAULT_EDITOR_USER
+    """The first allowed editor. Kept for messages and the ``/me`` payload."""
+    return editor_usernames()[0]
+
+
+def _is_allowed(name: str | None) -> bool:
+    if name is None:
+        return False
+    return name.casefold() in {n.casefold() for n in editor_usernames()}
 
 
 def attach_space_oauth(app: FastAPI) -> bool:
@@ -67,8 +85,7 @@ def logged_in_username(request: Request) -> str | None:
 
 
 def is_editor(request: Request) -> bool:
-    name = logged_in_username(request)
-    return name is not None and name == editor_username()
+    return _is_allowed(logged_in_username(request))
 
 
 def _deny(status_code: int, message: str) -> JSONResponse:
@@ -85,12 +102,12 @@ def require_editor(request: Request) -> str | Any:
     form; this is the real gate, including for ``gradio_client`` / curl POSTs.
     """
     name = logged_in_username(request)
-    allowed = editor_username()
     if name is None:
         return _deny(401, "Sign in with Hugging Face to edit the lexicon.")
-    if name != allowed:
+    if not _is_allowed(name):
+        allowed = ", ".join(editor_usernames())
         return _deny(
             403,
-            f"Lexicon edits are restricted to Hugging Face user {allowed}.",
+            f"Lexicon edits are restricted to Hugging Face user(s) {allowed}.",
         )
     return name

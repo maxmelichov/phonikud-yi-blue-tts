@@ -40,11 +40,11 @@ def _gate(request: Request) -> str | JSONResponse:
 async def lexicon_me(request: Request) -> dict[str, Any]:
     """Public: identity only. `can_edit` is true solely for the allowed username."""
     name = auth.logged_in_username(request)
-    allowed = auth.editor_username()
+    allowed = auth.editor_usernames()
     return {
         "username": name,
-        "editor": allowed,
-        "can_edit": name is not None and name == allowed,
+        "editor": ", ".join(allowed),
+        "can_edit": auth.is_editor(request),
         "login_url": "/oauth/huggingface/login",
         "logout_url": "/oauth/huggingface/logout",
         "persist": lexicon_edits.persist_status(),

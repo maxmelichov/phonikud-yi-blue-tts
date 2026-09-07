@@ -37,6 +37,11 @@ const ROUTE_TOOLTIP = {
 
 const el = (id) => document.getElementById(id);
 
+/* Set by initLexiconEditor once /v1/lexicon/me says this visitor may edit.
+   The results table is rendered by renderTokens, which runs long before the
+   editor exists, so the two talk through these instead of a shared closure. */
+const lexBridge = { canEdit: false, editWord: null };
+
 /* ---------------- small helpers ---------------- */
 
 function statusFor(mode) {
@@ -215,6 +220,22 @@ function renderTokens(tokens) {
 
     cell(tr, "cell-layer", token.layer);
     cell(tr, "cell-reason", token.reason);
+
+    if (lexBridge.canEdit) {
+      const fixTd = document.createElement("td");
+      fixTd.className = "tok-fix-col";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-fix";
+      btn.textContent = "Fix";
+      btn.title = "Correct how " + token.word + " is pronounced";
+      btn.setAttribute("aria-label", "Fix the pronunciation of " + token.word);
+      btn.addEventListener("click", () => {
+        if (lexBridge.editWord) lexBridge.editWord(token.word);
+      });
+      fixTd.appendChild(btn);
+      tr.appendChild(fixTd);
+    }
 
     tbody.appendChild(tr);
   });
@@ -508,6 +529,11 @@ function initLexiconEditor() {
       }
       if (me.can_edit) {
         editor.hidden = false;
+        // The results table gets its Fix column from the same verdict.
+        lexBridge.canEdit = true;
+        lexBridge.editWord = editFromResults;
+        const fixHead = el("token-fix-head");
+        if (fixHead) fixHead.hidden = false;
         load();
       }
     })
@@ -753,6 +779,49 @@ function initLexiconEditor() {
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     const ipaInput = el("lex-ipa");
     if (ipaInput) ipaInput.focus();
+  }
+
+  /* Fix, from the results table. The word came out of the sentence the user
+     just heard, so we fetch its live reading and open the same panel the browse
+     table opens. A word the engine only guessed at has no table row; that lands
+     in the add form with the guess prefilled, which is the correct next step. */
+  async function editFromResults(word) {
+    setLexStatus("Loading " + word + "…");
+    try {
+      const response = await fetch(
+        "/v1/lexicon/lookup?word=" + encodeURIComponent(word),
+        { credentials: "same-origin" }
+      );
+      const body = await response.json();
+      if (!response.ok) {
+        setLexStatus((body.error && body.error.message) || "Could not load that word.", "err");
+        return;
+      }
+      if (editor && editor.hidden) editor.hidden = false;
+      if (body.found) {
+        openEdit(body);
+        setLexStatus("Editing " + body.word + " from your sentence.", "");
+      } else {
+        openNew();
+        setValue("lex-word", body.word);
+        setValue("lex-ipa", body.ipa_primary || body.ipa || "");
+        const vyField = el("lex-vy-field");
+        if (vyField) vyField.hidden = !body.has_vav_yud;
+        const wordOut = el("lex-edit-word");
+        if (wordOut) wordOut.textContent = body.word;
+        const meta = el("lex-edit-meta");
+        if (meta) {
+          meta.textContent =
+            "The engine has no verified reading for this word — it guessed. " +
+            "Saving here makes your reading the answer everywhere.";
+        }
+        setLexStatus("Adding " + body.word + " from your sentence.", "warn");
+        const ipaInput = el("lex-ipa");
+        if (ipaInput) ipaInput.focus();
+      }
+    } catch (err) {
+      setLexStatus(String(err), "err");
+    }
   }
 
   function openNew() {
