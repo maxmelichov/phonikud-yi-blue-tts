@@ -42,6 +42,12 @@ const el = (id) => document.getElementById(id);
    editor exists, so the two talk through these instead of a shared closure. */
 const lexBridge = { canEdit: false, editWord: null };
 
+/* The last rows renderTokens drew. /v1/lexicon/me is a separate request, so an
+   editor who generates before it answers would get a table with no Fix column
+   and no way to get one short of generating again. Keeping the rows lets the
+   verdict redraw them whenever it lands. */
+let lastTokens = [];
+
 /* ---------------- small helpers ---------------- */
 
 function statusFor(mode) {
@@ -196,6 +202,7 @@ function renderTokens(tokens) {
 
   tbody.textContent = "";
   const rows = Array.isArray(tokens) ? tokens : [];
+  lastTokens = rows;
 
   if (!rows.length) {
     block.style.display = "none";
@@ -534,6 +541,9 @@ function initLexiconEditor() {
         lexBridge.editWord = editFromResults;
         const fixHead = el("token-fix-head");
         if (fixHead) fixHead.hidden = false;
+        // Redraw anything already on screen, so a table rendered before this
+        // answer arrived still gets its Fix column.
+        if (lastTokens.length) renderTokens(lastTokens);
         load();
       }
     })

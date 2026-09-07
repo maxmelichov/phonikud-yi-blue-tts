@@ -14,6 +14,7 @@ input; there is now one authority chain and one place it lives.
 from __future__ import annotations
 
 import base64
+import hashlib
 import logging
 from pathlib import Path
 
@@ -52,6 +53,30 @@ router = APIRouter()
 # HF's entrypoint), so anchor templates/ to the repo root instead of the CWD.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 templates = Jinja2Templates(directory=str(REPO_ROOT / "templates"))
+
+
+def _asset_version() -> str:
+    """A short hash of the served JS and CSS, appended to their URLs.
+
+    Neither file is sent with a `cache-control` header, so a browser is free to
+    keep the copy it already has. That is how two people on the same Space end
+    up on different builds: one hard-reloads and sees a new control, the other
+    reloads normally and does not. Changing the URL whenever the bytes change
+    settles it without asking anyone to clear a cache.
+    """
+    digest = hashlib.sha256()
+    for name in ("script.js", "style.css"):
+        path = REPO_ROOT / "static" / name
+        try:
+            digest.update(path.read_bytes())
+        except OSError:  # pragma: no cover - a missing asset is a 404, not a 500
+            digest.update(name.encode())
+    return digest.hexdigest()[:12]
+
+
+#: Computed once at import. The Space restarts on every deploy, so a new build
+#: always gets a new value, and a running process never re-hashes per request.
+ASSET_VERSION = _asset_version()
 
 #: Real Hasidic (Unterland/Central) Yiddish sentences, undotted as the G2P expects.
 SAMPLES: tuple[str, ...] = (
@@ -103,6 +128,7 @@ async def index(request: Request):
             "voices": voice_names(),
             "samples": list(SAMPLES),
             "version": __version__,
+            "asset_version": ASSET_VERSION,
         },
     )
 
