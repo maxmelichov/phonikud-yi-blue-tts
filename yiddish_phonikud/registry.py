@@ -27,17 +27,19 @@ DEFAULT_RUNTIME_ID = "blue_yi"
 ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
 # PINNED to a commit for the same reason blue-yi is (below): the engine decides
 # every phoneme the voice speaks, and tracking a branch means a cold cache can
-# fetch a new bundle unvetted. Still the v6 pointing model -- v7 was trained
-# and measured WORSE on the phonetic eval (vs_gold_rule 73.13 -> 72.76), so it
-# was not shipped. This revision adds the vowel-rule work on top: וי defaults
-# to ɔj (Weinreich 44) with oʊ kept as a closed û-class list so אויך is not
-# collapsed with הויז, plus ברויכ־, the פויל/פוילן homograph, and the
-# די + bare טויב context read. This revision adds the EIGHTH lexicon table:
-# data/lexicons/printed_respelling_lk.py, 1,991 readings from the phonetic
-# index of printed respelling's LK dictionary, ranked between Sefaria pointing and the
-# model guess (rescue #3, reason 'printed-respelling'); רבנוס now reads
-# rabˈajnis. All six G2P suites green; bundle selftest green.
-ENGINE_REVISION = "54351632e30cea6a67cdacb58c8b0356d2b97c03"
+# fetch a new bundle unvetted. This revision ships the v8 pointing model
+# (onnx_yiddish_v8): v6 + the audio-attested tier, in which the fine-tuned
+# Yiddish ear decided the reading of 576k rule-path tokens against the host's
+# own recordings. On the retrain2 gold-pointing test v8 is flat vs v6 (paired
+# net +13/1641, p≈0.32); on the audio yardstick — the pointed word read back
+# by the engine against what was said, 517 unlabelled test words — it beats v6
+# 48 to 4 (p≈0), and 74.3% vs 63.2% over 3,748 words on six held-out episodes.
+# v7 (measured worse) was never shipped. onnx_yiddish_v6 is removed from the
+# repo; the loader looks for v8 first. The engine tables are unchanged from
+# the previous pin (eight lexicon tables incl. printed_respelling_lk;
+# רבנוס reads rabˈajnis). Bundle selftest green; Space selftest green.
+# Full account: Phonikud-yi/docs/xeus_finetune.md §17-19.
+ENGINE_REVISION = "45e794dbed1222444b4a264fd7c4ed4eb4fdc05b"
 
 # The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries
