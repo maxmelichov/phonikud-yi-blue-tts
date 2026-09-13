@@ -26,7 +26,7 @@ COPY . .
 
 # --- the Hugging Face cache ------------------------------------------------
 # This container downloads TWO repos at runtime, ~1.8 GB together:
-#   notmax123/phonikud-yi-engine   1.54 GB  (v8 pointing model + ReNikud-yi int8 + G2P tables)
+#   notmax123/phonikud-yi-engine   1.54 GB  (v9 pointing model + ReNikud-yi int8 + G2P tables)
 #   notmax123/blue-yi              281 MB   (the default acoustic runtime)
 #
 # The single most common HF Spaces Docker failure: huggingface_hub defaults its

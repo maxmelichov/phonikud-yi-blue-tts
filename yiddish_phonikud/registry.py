@@ -27,19 +27,20 @@ DEFAULT_RUNTIME_ID = "blue_yi"
 ENGINE_REPO_ID = "notmax123/phonikud-yi-engine"
 # PINNED to a commit for the same reason blue-yi is (below): the engine decides
 # every phoneme the voice speaks, and tracking a branch means a cold cache can
-# fetch a new bundle unvetted. This revision adds ReNikud-yi (onnx_renikud_yi,
-# int8, ~300 MB): a char-BERT context reader on the v6 pointing body that
-# re-reads the words the rule path guessed at, choosing among the readings the
-# Yiddish spelling graph allows (א a/ɔ/u, פ f/p, יי aj/ej, וי ɔj/oʊ, ו i/u,
-# ɛ/ə, final devoicing); lexicon words are never touched. Paired against the
-# host's own recordings on six held-out episodes (3,726 unlabelled rule-path
-# words) the rule engine alone reads 87.6% right, engine + ReNikud-yi 94.0%
-# (torch decode 94.5%; int8 ONNX agrees with torch on 99.2% of words).
-# Rows it changes carry layer "R"; a word the writer pointed by hand is never
-# re-read. The v8 pointing model and the eight lexicon
-# tables are unchanged from the previous pin. Bundle selftest green; Space
-# selftest green. Full account: Phonikud-yi/docs/xeus_finetune.md §19, §26.
-ENGINE_REVISION = "08fad0942e3c3d9177e325920ec6f162dbc2d18d"
+# fetch a new bundle unvetted. This revision ships the v9 pointing model
+# (onnx_yiddish_v9, v8 removed from the repo; the loader looks for v9 first):
+# the audio-attested tier rebuilt with ReNikud-yi as a second witness on every
+# one of the ear's 576k decisions (coverage 79.3% → 83.8% of training tokens).
+# Paired against v8 on the audio yardstick — the pointed word read back by the
+# engine against what the host said, 3,748 unlabelled rule-path words on six
+# held-out episodes — v9 fixes 36 and breaks 12 (p = 0.0007; 74.3% → 75.0%);
+# on the gold-pointing test it is flat-to-better (rule tokens 73.6% → 74.1%,
+# 42/33, p = 0.36). It also carries ReNikud-yi (onnx_renikud_yi, int8), the
+# context reader for rule-path words: engine alone 87.6% vs engine + reader
+# 94.0% on the same words; rows it changes carry layer "R", lexicon words and
+# hand-pointed words are never touched. Bundle selftest green; Space selftest
+# green. Full account: Phonikud-yi/docs/xeus_finetune.md §19, §26, §28.
+ENGINE_REVISION = "7fa75899901232efa0736c7dad33a2c9f45ae52d"
 
 # The blue-yi acoustic bundle. Like the engine it is fetched with
 # huggingface_hub rather than committed to the Space, so its manifest carries
