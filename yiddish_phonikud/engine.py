@@ -244,6 +244,9 @@ def info() -> dict[str, Any]:
         "revision": ENGINE_REVISION,
         "dir": str(engine_dir()),
         "tables": dict(report.get("sizes", {})),
+        # ReNikud-yi, the context model on the rule path (engine bundle
+        # yiddish_renikud.py): "installed (...)" or why not.
+        "context_reader": str(getattr(_labels, "CONTEXT_READER", "not in this engine")),
         "loaded": is_loaded(),
     }
 

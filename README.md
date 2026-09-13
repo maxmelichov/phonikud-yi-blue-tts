@@ -230,7 +230,13 @@ Fixed chain, highest tier first; a lower tier never overrides a higher one.
    spelling genuinely leaves open (`א`, `פ`, `יי`, `וי`, shuruk-`ו`). Elsewhere the letter
    decides, so an audio deviation is a process, not evidence. Survivors ship at MED.
 3. **Published pointing** (Sefaria) — LOW confidence, always queued.
-4. **The v5 model's contextual guess** — LOW confidence, always queued.
+4. **The pointing model's contextual guess** — LOW confidence, always queued.
+5. **ReNikud-yi**, for the words no table holds at all — a character model that reads the
+   whole sentence and chooses, among the *legal* readings of the spelling (its open slots
+   branched from the rule engine's reading), the one the context supports. It never touches a
+   word a table answered. On 3,748 unlabelled words across six held-out episodes it agrees
+   with the host's audio 94.5% of the time; the rule engine alone 88.0%. Such words show
+   layer `R` in the token table, with the engine's own reading in the reason column.
 
 When audio contradicts gold, the conflict becomes a question for the native reviewer, never a
 silent flip. The G2P loads its knowledge from **7 generated lexicon tables**, and

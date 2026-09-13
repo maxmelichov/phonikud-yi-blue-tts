@@ -548,6 +548,21 @@ try:
         ", ".join(f"{k}={v}" for k, v in tables.items()) if not empty
         else f"EMPTY: {', '.join(empty)} — redownload the engine, do not serve",
     )
+    # --- ReNikud-yi, the context model on the rule path ---------------------
+    # Engine bundle yiddish_renikud.py, installed by yiddish_labels at import.
+    # Words a table answers are never touched; a rule-path word is re-read
+    # from the whole sentence among the legal readings of its spelling.
+    reader = str(info.get("context_reader", ""))
+    check(reader.startswith("installed"), "ReNikud-yi context reader installed", reader)
+    if reader.startswith("installed"):
+        # דע and עליכם are rule-path; the rule engine says dɛ / ˈɛlixm, the
+        # host says də / ˈəlixm (audio decisions over dozens of clips each).
+        ctx = engine.text_to_ipa("דע צדיקים האבן געזאגט שלום עליכם")
+        check(ctx.startswith("də ") and "ˈəlixm" in ctx, "ReNikud-yi re-reads דע / עליכם from context", ctx)
+        rows_ctx = engine.token_table("דע צדיקים האבן געזאגט שלום עליכם", nikud="")
+        check(any(r.layer == "R" and r.word == "דע" for r in rows_ctx),
+              "token table marks the re-read word with layer R", ", ".join(f"{r.word}:{r.layer}" for r in rows_ctx))
+
     # --- respelling as a correction channel (the REYD approach) -------------
     # REYD's Yiddish TTS sidesteps loshn-koydesh entirely: its corpus respells
     # Hebrew-origin words phonetically (תכשיט -> טאַכשעט) so that letters ARE
